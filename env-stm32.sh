@@ -47,9 +47,10 @@ set(optChipFamily STM32F10X_MD CACHE STRING \"Chip family for platform headers\"
 set_property(CACHE optChipFamily PROPERTY STRINGS STM32F10X_LD STM32F10X_LD_VL\n\
     STM32F10X_MD STM32F10X_MD_VL STM32F10X_HD STM32F10X_HD_VL STM32F10X_XL STM32F10X_CL)\n\
 \n\
-set(CMAKE_C_FLAGS \"$CFLAGS -D${optChipFamily}\")\n\
-set(CMAKE_CXX_FLAGS \"${CMAKE_C_FLAGS}\")\n\
-set(CMAKE_EXE_LINKER_FLAGS ${LDFLAGS} -T \"${optLinkScript}\")\n\
+set(CMAKE_C_FLAGS \"$CFLAGS\")\n\
+set(CMAKE_CXX_FLAGS \"\${CMAKE_C_FLAGS}\")\n\
+add_definitions(-D\${optChipFamily})\n\
+set(CMAKE_EXE_LINKER_FLAGS \"\${LDFLAGS} -T\${optLinkScript}\")\n\
 \n\
 set(CMAKE_FIND_ROOT_PATH \"$STM32_SYSROOT\")\n\
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)\n\
