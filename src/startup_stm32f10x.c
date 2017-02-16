@@ -36,8 +36,6 @@ typedef void( *const intfunc )( void );
 /* Private define ------------------------------------------------------------*/
 #define WEAK __attribute__ ((weak))
 
-/* Private macro -------------------------------------------------------------*/
-extern unsigned long _etext;
 /* start address for the initialization values of the .data section.
 defined in linker script */
 extern unsigned long _sidata;

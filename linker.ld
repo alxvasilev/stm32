@@ -13,8 +13,8 @@ ENTRY(Reset_Handler)
 /* Memory Spaces Definitions */
 MEMORY
 {
-    RAM      (RWX) : ORIGIN = 0x20000000, LENGTH = 20K
-    FLASH    (RX)  : ORIGIN = 0x08000000, LENGTH = 128K
+    RAM      (RWX) : ORIGIN = 0x20000000, LENGTH = 0x5000
+    FLASH    (RX)  : ORIGIN = 0x08000000, LENGTH = 0x20000
 }
 
 /* higher address of the user mode stack */
@@ -37,35 +37,12 @@ SECTIONS
 	/* the program code is stored in the .text section, which goes to Flash */
 	.text :
 	{
-		. = ALIGN(0x80); /* PM0056, Rev.1 (4/2009), 4.3.3 */
 		_isr_vectorsflash_offs = . - 0x08000000;
 		KEEP(*(.isr_vectorsflash))
 		. = ALIGN(4);
 		CREATE_OBJECT_SYMBOLS
-		*(.text .text.* .gnu.linkonce.t.*)
-		*(.plt)
-		*(.gnu.warning)
-		*(.glue_7t) *(.glue_7) *(.vfp11_veneer)
-		*(.ARM.extab* .gnu.linkonce.armextab.*)
-		*(.gcc_except_table)
-	} >FLASH
-
-	.eh_frame_hdr : ALIGN (4)
-	{
-		KEEP (*(.eh_frame_hdr))
-	} >FLASH
-	.eh_frame : ALIGN (4)
-	{
-		KEEP (*(.eh_frame))
 	} >FLASH
 	
-	/* .ARM.exidx is sorted, so has to go in its own output section.  */
-	__exidx_start = .;
-	.ARM.exidx :
-	{
-		*(.ARM.exidx* .gnu.linkonce.armexidx.*)
-	} >FLASH
-	__exidx_end = .;
 
 	.rodata : ALIGN (4)
 	{
