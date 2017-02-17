@@ -2,7 +2,6 @@ owndir=`echo "$(cd $(dirname "${BASH_SOURCE[0]}"); pwd)"`
 
 if [ "$#" != "1" ]; then
     STM32_SYSROOT=$owndir
-    echo "Defaulting sysroot to script dir"
 else
     STM32_SYSROOT=`readlink -f $1`
 fi
@@ -76,5 +75,9 @@ function flash
     $owndir/flash.sh $@
 }
 
-echo -e "Your environment has been set up for STM32 cross-compilation"
-
+echo -e "Your environment has been set up for STM32 cross-compilation.\n\n\
+SYSROOT=$STM32_SYSROOT\n
+Use the 'xcmake' command instead of 'cmake' in order to configure project for\n\
+cross-compilation\n\
+Use the 'flash' command to flash chip, see flash --help for details\n\
+Use 'ocmd <command[;command[...]]>' to send any command to OpenOCD.\n"

@@ -22,3 +22,4 @@ if [ `pidof openocd > /dev/null; echo $?` != "0" ]; then
 fi
 
 echo "$1" | nc -T -c localhost 4444
+echo -e "\n\033[1;32mDone\033[0m"
