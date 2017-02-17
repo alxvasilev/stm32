@@ -33,7 +33,7 @@ do
         ;;
     *)
         if [ ${1:0:1} != '-' ]; then
-            if [ ! -z "$fname"]; then
+            if [ ! -z "$fname" ]; then
                 echo "Only one file name can be specified"
                 exit 1
             fi

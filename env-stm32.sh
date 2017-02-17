@@ -16,17 +16,17 @@ export CMAKE_XCOMPILE_ARGS="-DCMAKE_TOOLCHAIN_FILE=$STM32_CMAKE_TOOLCHAIN"
 
 function xcmake
 {
-    cmake $CMAKE_XCOMPILE_ARGS $@
+    cmake $CMAKE_XCOMPILE_ARGS "$@"
 }
 
 function ocmd
 {
-    $owndir/ocmd.sh $@
+    $owndir/ocmd.sh "$@"
 }
 
 function flash
 {
-    $owndir/flash.sh $@
+    $owndir/flash.sh "$@"
 }
 
 echo -e "Your environment has been set up for STM32 cross-compilation.\n\n\

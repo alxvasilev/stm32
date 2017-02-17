@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [ "$#" != "1" ]; then
+if [ "$#" -lt "1" ]; then
     echo -e "OpenOCD command client. Usage:\n\
     ocmd.sh \"<command[;command[;command[...]]]>\""
     exit 1
@@ -23,4 +23,4 @@ fi
 
 # exit should go on another line, because if there is an error in the user
 # command, the exit command will be ignored
-echo -e "$1\nexit" | nc -T localhost 4444
+echo -e "$@\nexit" | nc -T localhost 4444
