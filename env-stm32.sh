@@ -66,5 +66,15 @@ function xcmake
     cmake $CMAKE_XCOMPILE_ARGS $@
 }
 
+function ocmd
+{
+    $owndir/ocmd.sh $@
+}
+
+function flash
+{
+    $owndir/flash.sh $@
+}
+
 echo -e "Your environment has been set up for STM32 cross-compilation"
 
