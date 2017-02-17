@@ -1,5 +1,4 @@
 #!/bin/bash
-set -e
 
 if [ "$#" != "1" ]; then
     echo -e "OpenOCD command client. Usage:\n\
@@ -22,6 +21,5 @@ if [ `pidof openocd > /dev/null; echo $?` != "0" ]; then
     echo "OpenOCD telnet port detected, proceding with command"
 fi
 
-set +e
 echo "$1; exit" | nc -T localhost 4444
 echo -e "\033[1;32mDone\033[0m"
