@@ -69,4 +69,5 @@ if [ "$hlt" != "1" ]; then
     rst="; reset"
 fi
 
+fname=`readlink -f "$fname"`
 $owndir/ocmd.sh "halt; flash write_image erase $fname 0x08000000 $type$rst"

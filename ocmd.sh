@@ -24,4 +24,3 @@ fi
 # exit should go on another line, because if there is an error in the user
 # command, the exit command will be ignored
 echo -e "$1\nexit" | nc -T localhost 4444
-echo -e "\033[1;32mDone\033[0m"
