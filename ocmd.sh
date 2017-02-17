@@ -21,5 +21,5 @@ if [ `pidof openocd > /dev/null; echo $?` != "0" ]; then
     echo "OpenOCD telnet port detected, proceding with command"
 fi
 
-echo "$1; exit" | nc -T localhost 4444
+echo -e "$1\nexit" | nc -T localhost 4444
 echo -e "\033[1;32mDone\033[0m"
