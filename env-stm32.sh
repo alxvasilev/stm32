@@ -29,6 +29,7 @@ function flash
     $owndir/flash.sh "$@"
 }
 
+# Convenience alias
 alias gdb="arm-none-eabi-gdb"
 
 echo -e "Your environment has been set up for STM32 cross-compilation.\n\n\
