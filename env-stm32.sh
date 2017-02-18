@@ -29,6 +29,8 @@ function flash
     $owndir/flash.sh "$@"
 }
 
+alias gdb="arm-none-eabi-gdb"
+
 echo -e "Your environment has been set up for STM32 cross-compilation.\n\n\
 SYSROOT=$STM32_SYSROOT\n
 Use the 'xcmake' command instead of 'cmake' in order to configure project for\n\
