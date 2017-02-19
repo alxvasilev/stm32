@@ -8,8 +8,10 @@ set(CMAKE_CXX_COMPILER arm-none-eabi-g++)
 set(CMAKE_ASM_COMPILER arm-none-eabi-as)
 set(CMAKE_LINKER arm-none-eabi-ld)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-common -mcpu=cortex-m3 -mthumb -nostartfiles" CACHE STRING "")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-common -fno-exceptions -fno-rtti -mcpu=cortex-m3 -mthumb -nostartfiles" CACHE STRING "")
 set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS}" CACHE STRING "")
+set(CMAKE_C_FLAGS_DEBUG "-g -O0" CACHE STRING "")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0" CACHE STRING "")
 
 if (optUseOpencm3)
     set(optUseOpencm3 1 CACHE BOOL "Use the libopencm3 platform" FORCE)
@@ -35,7 +37,8 @@ else()
     set(optLinkScript "${defaultLinkScript}" CACHE PATH "Linker script" FORCE)
 endif()
 
-add_definitions(-D${optChipFamily})
+add_definitions(-D${optChipFamily} -Wall)
+
 set(CMAKE_EXE_LINKER_FLAGS "-nostartfiles --specs=nosys.specs -T${optLinkScript}" CACHE STRING "")
 
 set(CMAKE_FIND_ROOT_PATH "${CMAKE_SYSROOT}")
@@ -44,5 +47,5 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 
 set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type")
-
+set_Property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release MinSizeRel RelWithDebInfo)
 
