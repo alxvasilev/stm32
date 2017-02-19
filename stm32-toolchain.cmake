@@ -37,7 +37,7 @@ else()
 endif()
 
 add_definitions(-D${optChipFamily})
-set(CMAKE_EXE_LINKER_FLAGS "-nostartfiles -T${optLinkScript}" CACHE STRING "")
+set(CMAKE_EXE_LINKER_FLAGS "-nostartfiles --specs=nosys.specs -T${optLinkScript}" CACHE STRING "")
 
 set(CMAKE_FIND_ROOT_PATH "${CMAKE_SYSROOT}")
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
