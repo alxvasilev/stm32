@@ -32,7 +32,13 @@ function flash
 }
 export -f flash
 
-export PS1="[\u@\033[0;32m\033[3mstm32\033[0m \W]\$"
+if [ "$USER" == "root" ]; then
+    prompt="#"
+else
+    prompt="\$"
+fi
+
+export PS1="[\u@\[\033[0;32m\]\[\033[3m\]stm32\[\033[0m\] \W]$prompt"
 
 # Convenience alias
 alias gdb=arm-none-eabi-gdb
