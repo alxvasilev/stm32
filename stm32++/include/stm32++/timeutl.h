@@ -57,7 +57,10 @@ public:
     ElapsedTimer(): mStart(T::get()){}
     void reset() { mStart = T::get(); }
     uint32_t tsStart() const { return mStart; }
-    uint32_t ticksElapsed() const { return T::get() - mStart; }
+    uint32_t ticksElapsed() const
+    { //compensate for our own one cycle overhead
+        return T::get() - mStart - 1;
+    }
     uint32_t nsElapsed() { return T::ticksToNs(ticksElapsed()); }
     uint32_t usElapsed() { return T::ticksToUs(ticksElapsed()); }
     uint32_t msElapsed() { return T::ticksToMs(ticksElapsed()); }
