@@ -43,7 +43,7 @@ include_directories("${CMAKE_CURRENT_LIST_DIR}/stm32++/include")
 set(CMAKE_EXE_LINKER_FLAGS "-nostartfiles -T${optLinkScript}" CACHE STRING "")
 set(CMAKE_EXE_LINKER_FLAGS_RELEASE "--specs=nosys.specs")
 
-if (optDontUseSemihosting)
+if (optNoSemihosting)
     set(CMAKE_EXE_LINKER_FLAGS_DEBUG "--specs=nosys.specs" CACHE STRING "")
 else()
     set(CMAKE_EXE_LINKER_FLAGS_DEBUG "--specs=rdimon.specs -lc" CACHE STRING "")
