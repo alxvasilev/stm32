@@ -1,3 +1,8 @@
+/**
+ * @author Alexander Vassilev
+ * @copyright BSD License
+ */
+
 #ifndef _TOSTRING_H
 #define _TOSTRING_H
 

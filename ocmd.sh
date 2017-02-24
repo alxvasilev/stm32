@@ -1,4 +1,6 @@
 #!/bin/bash
+# @author Alexander Vassilev
+# @copyright BSD License
 
 if [ "$#" -lt "1" ]; then
     echo -e "OpenOCD command client. Usage:\n\

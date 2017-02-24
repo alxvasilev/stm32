@@ -1,3 +1,8 @@
+#!/bin/bash
+
+# @author Alexander Vassilev
+# @copyright BSD License
+
 owndir=`echo "$(cd $(dirname "${BASH_SOURCE[0]}"); pwd)"`
 
 if [ "$#" != "1" ]; then

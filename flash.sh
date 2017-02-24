@@ -1,4 +1,6 @@
 #!/bin/bash
+# @author Alexander Vassilev
+# @copyright BSD License
 
 function printUsage
 {

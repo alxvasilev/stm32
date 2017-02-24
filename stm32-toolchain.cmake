@@ -1,3 +1,8 @@
+# @author Alexander Vassilev
+# @copyright BSD License
+
+# CMake toolchain for arm-none-eabi-gcc and STM32
+
 cmake_minimum_required(VERSION 3.0)
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR arm)

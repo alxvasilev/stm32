@@ -1,3 +1,8 @@
+/**
+ * @author Alexander Vassilev
+ * @copyright BSD License
+ */
+
 #ifndef _SNPRINT_H
 #define _SNPRINT_H
 

@@ -1,3 +1,10 @@
+/**
+ * @author Alexander Vassilev
+ * @copyright BSD license
+ */
+#ifndef _TIME_UTILS_H
+#define _TIME_UTILS_H
+
 #include <libopencm3/cm3/dwt.h>
 #include <libopencm3/cm3/cortex.h>
 #include <libopencm3/stm32/rcc.h>
@@ -108,3 +115,5 @@ public:
         return result;
     }
 };
+
+#endif
