@@ -9,16 +9,16 @@ fi
 pid=`pidof openocd`
 if [ `pidof openocd > /dev/null; echo $?` != "0" ]; then
     echo "OpenOCD not running, starting it..."
-    sudo openocd \
+    openocd \
         -f /usr/share/openocd/scripts/interface/stlink-v2.cfg \
         -f /usr/share/openocd/scripts/target/stm32f1x.cfg \
-        -c "log_output /var/log/openocd.log" &
+        -c "log_output /var/log/openocd.log; init; arm semihosting enable" &
     sleep 1
     while [ `nc -z -w5 localhost 4444; echo $?` != "0" ]
     do
         sleep 1
     done
-    echo "OpenOCD telnet port detected, proceding with command"
+    echo "OpenOCD telnet port detected, proceeding with command"
 fi
 
 # exit should go on another line, because if there is an error in the user

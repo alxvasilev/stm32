@@ -1,7 +1,7 @@
 owndir=`echo "$(cd $(dirname "${BASH_SOURCE[0]}"); pwd)"`
 
 if [ "$#" != "1" ]; then
-    STM32_SYSROOT=$owndir
+    STM32_SYSROOT="$owndir/sysroot"
 else
     STM32_SYSROOT=`readlink -f $1`
 fi
@@ -11,7 +11,7 @@ if [ ! -d "$STM32_SYSROOT" ]; then
    return 2
 fi
 
-STM32_CMAKE_TOOLCHAIN="$STM32_SYSROOT/stm32-toolchain.cmake"
+STM32_CMAKE_TOOLCHAIN="$owndir/stm32-toolchain.cmake"
 export CMAKE_XCOMPILE_ARGS="-DCMAKE_TOOLCHAIN_FILE=$STM32_CMAKE_TOOLCHAIN"
 
 function xcmake

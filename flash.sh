@@ -57,17 +57,9 @@ if [ ! -f "$fname" ]; then
     exit 2
 fi
 
-extension="${fname##*.}"
-if [ "$extension" == "elf" ] || [ "$elf" == "1" ]; then
-    type="elf"
-    echo "Flashing ELF file"
-else
-    type=""
-fi
-
 if [ "$hlt" != "1" ]; then
-    rst="reset"
+    rst="; reset"
 fi
 
 fname=`readlink -f "$fname"`
-$owndir/ocmd.sh "program $fname verify $rst; exit"
+$owndir/ocmd.sh "reset halt; flash write_image erase $fname $rst; exit"
