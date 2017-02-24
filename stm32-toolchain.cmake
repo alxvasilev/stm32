@@ -43,10 +43,18 @@ else()
     set(optLinkScript "${defaultLinkScript}" CACHE PATH "Linker script" FORCE)
 endif()
 
+set(optNoSemihosting 0 CACHE BOOL "Disable linking to semihosting C library")
+set(optSemihostingInRelease 0 CACHE BOOL "Use semihosting in release mode (careful!)")
+
 add_definitions(-D${optChipFamily} -Wall)
 include_directories("${CMAKE_CURRENT_LIST_DIR}/stm32++/include")
 set(CMAKE_EXE_LINKER_FLAGS "-nostartfiles -T${optLinkScript}" CACHE STRING "")
-set(CMAKE_EXE_LINKER_FLAGS_RELEASE "--specs=nosys.specs")
+
+if (NOT optNoSemihosting AND optSemihostingInRelease)
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "--specs=rdimon.specs -lc")
+else()
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "--specs=nosys.specs")
+endif()
 
 if (optNoSemihosting)
     set(CMAKE_EXE_LINKER_FLAGS_DEBUG "--specs=nosys.specs" CACHE STRING "")
