@@ -6,7 +6,8 @@
 cmake_minimum_required(VERSION 3.0)
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR arm)
-set(CMAKE_SYSROOT "${CMAKE_CURRENT_LIST_DIR}")
+set(CMAKE_SYSROOT "${CMAKE_CURRENT_LIST_DIR}/sysroot")
+set(ENV_SCRIPTS_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
 set(CMAKE_C_COMPILER arm-none-eabi-gcc)
 set(CMAKE_CXX_COMPILER arm-none-eabi-g++)
@@ -36,7 +37,7 @@ if (optUseOpencm3)
     include_directories("${CMAKE_CURRENT_LIST_DIR}/libopencm3/include")
 else()
     set(optUseOpencm3 0 CACHE BOOL "Use the libopencm3 platform" FORCE)
-    set(defaultLinkScript "${CMAKE_SYSROOT}/stm32.ld")
+    set(defaultLinkScript "${CMAKE_CURRENT_LIST_DIR}/stm32.ld")
     set(optChipFamily STM32F10X_MD CACHE STRING "Chip family for platform headers" FORCE)
     set_property(CACHE optChipFamily PROPERTY STRINGS STM32F10X_LD STM32F10X_LD_VL
         STM32F10X_MD STM32F10X_MD_VL STM32F10X_HD STM32F10X_HD_VL STM32F10X_XL STM32F10X_CL)
