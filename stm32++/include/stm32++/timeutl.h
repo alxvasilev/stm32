@@ -34,7 +34,7 @@ public:
 #ifndef NDEBUG
         enum { kCycleOverhead = 160 }; //in debug build, the func call overhead is quite high
 #else
-        enum { kCycleOverhead = 19 };
+        enum { kCycleOverhead = 16 };
 #endif
         uint32_t now = get();
         uint32_t ticks = t * (rcc_ahb_frequency/1000) / Div;
