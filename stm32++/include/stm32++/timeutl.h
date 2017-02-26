@@ -14,7 +14,7 @@ class DwtCounter
 {
 public:
     typedef uint32_t Word;
-    static volatile uint32_t get() { return DWT_CYCCNT; }
+    static volatile uint32_t get() { return (volatile uint32_t)DWT_CYCCNT; }
 
     template <class W=uint32_t>
     static W ticksToNs(W ticks)
@@ -28,13 +28,13 @@ public:
     static W ticksToMs(W ticks)
     { return (ticks * 1000) / rcc_ahb_frequency; }
 
-    template <uint32_t Div>
+    template <uint32_t Div, int32_t Corr>
     static volatile void delay(uint32_t t)
     {
 #ifndef NDEBUG
-        enum { kCycleOverhead = 160 }; //in debug build, the func call overhead is quite high
+        enum { kCycleOverhead = 160 + Corr}; //in debug build, the func call overhead is quite high
 #else
-        enum { kCycleOverhead = 16 };
+        enum { kCycleOverhead = 16 + Corr};
 #endif
         uint32_t now = get();
         uint32_t ticks = t * (rcc_ahb_frequency/1000) / Div;
@@ -68,37 +68,64 @@ public:
     volatile uint32_t usElapsed() { return T::ticksToUs(ticksElapsed()); }
     volatile uint32_t msElapsed() { return T::ticksToMs(ticksElapsed()); }
 };
-template <uint32_t ns, uint32_t freq>
+
+// Should never be actually instantiated with negative values,
+// but satisfies compiler checks.
+template <int32_t Count>
+typename std::enable_if<(Count <= 0), void>::type nop()
+{
+}
+
+template <int32_t Count>
+typename std::enable_if<(Count == 1), void>::type nop()
+{
+    asm volatile("nop;");
+}
+
+// WARNING: for Count >=30, there is huge random overhead, probably result of
+// cache pre-fetch, as the nop sequence does not fit in the  cache anymore
+template <int32_t Count>
+typename std::enable_if<(Count > 1), void>::type nop()
+{
+    asm volatile("nop;");
+    nop<Count-1>();
+}
+/*
+template <uint32_t Ns, uint32_t Freq>
+typename std::enable_if<(Ns <= 100), void>::type nsDelay()
+{
+    nop<(Ns * (Freq / 1000)) / 1000000>();
+}
+*/
+template <uint32_t Ns, uint32_t Freq>
 void nsDelay()
 {
 
 //Loop takes 5 cycles if clock is 72 MHz, and 3 cycles if clock is 24 MHz
     enum: uint32_t
     {
-        kTicks = (ns * (freq / 1000)) / 1000000,
-        kTicksPerLoop = (freq > 24000000) ? 6 : 3
+        kOverhead = 2,
+        kTicks = (Ns * (Freq / 1000)) / 1000000,
+        kTicksPerLoop = (Freq > 24000000) ? 6 : 3
     };
 
-    if (kTicks <= 9)
+    if (kTicks <= kOverhead)
         return;
-    else if (kTicks <= 12)
-    {
-        struct Nop { Nop() { asm volatile("nop"); } };
-        volatile Nop nops[kTicks-4];
-    }
-    else
-    {
-        enum: uint32_t { kLoops = (kTicks-2) / kTicksPerLoop };
-        if (kLoops == 0)
-            return;
-        register uint32_t loops = kLoops;
-        asm volatile("0:" "SUBS %[count], 1;" "BNE 0b;" :[count]"+r"(loops));
-    }
+
+    nop<(kTicks-kOverhead) % kTicksPerLoop>();
+    enum: uint32_t { kLoops = (kTicks-kOverhead) / kTicksPerLoop };
+    if (kLoops == 0)
+        return;
+    register uint32_t loops = kLoops;
+    asm volatile("0:" "SUBS %[count], 1;" "BNE 0b;" :[count]"+r"(loops));
 }
 
-static inline void nsDelay(uint32_t ns) { DwtCounter::delay<1000000>(ns); }
-static inline void usDelay(uint32_t us) { DwtCounter::delay<1000>(us); }
-static inline void msDelay(uint32_t ms) { DwtCounter::delay<1>(ms); }
+template<int32_t TickCorr=0>
+void nsDelay(uint32_t ns) { DwtCounter::delay<1000000, TickCorr>(ns); }
+template <int32_t TickCorr=0>
+void usDelay(uint32_t us) { DwtCounter::delay<1000, TickCorr>(us); }
+template <int32_t TickCorr=0>
+static inline void msDelay(uint32_t ms) { DwtCounter::delay<1, TickCorr>(ms); }
 
 
 template <bool Int, class T>
