@@ -275,14 +275,6 @@ template <uint32_t base>
 struct Pow<base, 1>
 { enum: uint32_t { value = base }; };
 
-template <typename T, uint8_t p>
-struct Dec
-{ static constexpr T value = ((T)1)/10 * Dec<T, p-1>::value; };
-
-template <typename T>
-struct Dec<T, 1>
-{ static constexpr T value = ((T)1)/10; };
-
 template<typename Val, uint32_t Prec=6, Flags flags=kNoFlags>
 typename std::enable_if<std::is_floating_point<Val>::value, char*>::type
 toString(char* buf, uint32_t bufsize, Val val, uint8_t padding=0)
@@ -313,7 +305,7 @@ toString(char* buf, uint32_t bufsize, Val val, uint8_t padding=0)
         }
     }
     uint32_t whole = (uint32_t)(val);
-    uint32_t decimal = (val-whole+Dec<Val, Prec+1>::value*5)*Pow<10, Prec>::value;
+    uint32_t decimal = (val-whole)*Pow<10, Prec>::value+0.5;
 
     //we have some minimum space for null termination even if buffer is not enough
     buf = toString<10, flags>(buf, bufRealEnd-buf, whole, padding);
