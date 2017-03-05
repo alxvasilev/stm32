@@ -1,6 +1,6 @@
 #include <stm32++/snprint.h>
 
-void semihostingPuts(const char* str, uint32_t len, int fd, void* userp);
+void semihostingPuts(const char* str, uint16_t len, uint8_t fd, void* userp);
 
 PrintSinkFunc gPrintSinkFunc = semihostingPuts;
 void* gPrintSinkUserp = nullptr;
@@ -30,7 +30,7 @@ char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr)
     return buf;
 }
 
-void semihostingPuts(const char* str, uint32_t len, int fd, void* userp)
+void semihostingPuts(const char* str, uint16_t len, uint8_t fd, void* userp)
 {
     struct Msg
     {

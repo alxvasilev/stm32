@@ -10,7 +10,7 @@
 #include <assert.h>
 #include <stdlib.h>
 
-typedef void(*PrintSinkFunc)(const char* str, uint32_t len, int fd, void* userp);
+typedef void(*PrintSinkFunc)(const char* str, uint16_t len, uint8_t fd, void* userp);
 
 void setPrintSink(PrintSinkFunc func, void* arg);
 PrintSinkFunc printSink();
@@ -46,27 +46,15 @@ char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr, Val val, Args..
     return nullptr;
 }
 
-template <class T>
-struct AutoFree
-{
-    operator T*() const { return mPtr; }
-    operator bool() const { return mPtr != nullptr; }
-    AutoFree(T* ptr): mPtr(ptr){}
-    ~AutoFree() { if (mPtr) free(mPtr); }
-    void reassign(T* ptr) { mPtr = ptr; }
-    T* get() const { return mPtr; }
-protected:
-    T* mPtr;
-};
-
-template <uint32_t BufSize=64, typename ...Args>
-uint32_t ftprintf(int fd, const char* fmtStr, Args... args)
+template <int32_t BufSize=64, typename ...Args>
+uint32_t ftprintf(uint8_t fd, const char* fmtStr, Args... args)
 {
     extern PrintSinkFunc gPrintSinkFunc;
     extern void* gPrintSinkUserp;
 
-    uint32_t bufsize = BufSize;
-    AutoFree<char> buf = (char*)malloc(BufSize);
+    uint16_t bufsize = BufSize & 0x7fffffff;
+    char sbuf[BufSize & 0x7fffffff];
+    char* buf = sbuf;
     char* ret;
     for(;;)
     {
@@ -74,15 +62,28 @@ uint32_t ftprintf(int fd, const char* fmtStr, Args... args)
         if (ret)
             break;
 
+        if (BufSize < 0) //no dynamic buffer allower
+            return 0;
+
+        //have to increase buf size
         bufsize *= 2;
         if (bufsize > 10240)
+        {
+            //too much, bail out
+            if (buf != sbuf)
+                free(buf);
             return 0;
-        buf.reassign((char*)realloc(buf, bufsize));
+        }
+        buf = (buf == sbuf)
+            ? (char*)malloc(bufsize)
+            : (char*)realloc(buf, bufsize);
         if (!buf)
             return 0;
     }
-    uint32_t size = ret-buf.get();
+    uint32_t size = ret-buf;
     gPrintSinkFunc(buf, size, fd, gPrintSinkUserp);
+    if (buf != sbuf)
+        free(buf);
     return size;
 }
 
