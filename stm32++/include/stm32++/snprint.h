@@ -47,7 +47,7 @@ char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr, Val val, Args..
 }
 
 template <int32_t BufSize=64, typename ...Args>
-uint32_t ftprintf(uint8_t fd, const char* fmtStr, Args... args)
+uint16_t ftprintf(uint8_t fd, const char* fmtStr, Args... args)
 {
     extern PrintSinkFunc gPrintSinkFunc;
     extern void* gPrintSinkUserp;
@@ -88,7 +88,7 @@ uint32_t ftprintf(uint8_t fd, const char* fmtStr, Args... args)
 }
 
 template <int32_t BufSize=64, typename ...Args>
-uint32_t tprintf(const char* fmtStr, Args... args)
+uint16_t tprintf(const char* fmtStr, Args... args)
 {
     return ftprintf<BufSize>(1, fmtStr, args...);
 }
