@@ -87,7 +87,7 @@ uint32_t ftprintf(uint8_t fd, const char* fmtStr, Args... args)
     return size;
 }
 
-template <uint32_t BufSize=64, typename ...Args>
+template <int32_t BufSize=64, typename ...Args>
 uint32_t tprintf(const char* fmtStr, Args... args)
 {
     return ftprintf<BufSize>(1, fmtStr, args...);
