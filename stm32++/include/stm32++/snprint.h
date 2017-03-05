@@ -93,7 +93,7 @@ uint32_t tprintf(const char* fmtStr, Args... args)
     return ftprintf<BufSize>(1, fmtStr, args...);
 }
 
-static inline void puts(const char* str, uint32_t len)
+static inline void puts(const char* str, uint16_t len)
 {
     extern PrintSinkFunc gPrintSinkFunc;
     extern void* gPrintSinkUserp;
