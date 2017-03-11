@@ -9,7 +9,7 @@
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/usart.h>
 #include <libopencm3/stm32/dma.h>
-
+#include "snprint.h"
 #include <assert.h>
 
 class UsartBase
@@ -93,15 +93,28 @@ template<class Base, uint32_t Dma>
 class UsartTxDma: public UsartTx<Base>
 {
 protected:
+    typedef void(*FreeFunc)(void*);
     volatile bool mTxBusy = false;
+    volatile const void* mTxBuf = nullptr;
+    volatile FreeFunc mFreeFunc = nullptr;
+
+    typedef UsartTxDma<Base, Dma> Self;
+    static void dmaPrintSink(const char* str, uint16_t len, uint8_t fd, void* userp)
+    {
+        auto& self = *static_cast<Self*>(userp);
+        self.dmaWrite((const void*)str, len, tprintf_free);
+    }
 public:
     volatile bool txBusy() const { return mTxBusy; }
-    bool dmaWrite(const char *data, uint16_t size)
+    bool dmaWrite(const void* data, uint16_t size, FreeFunc freeFunc)
     {
         enum { chan = Base::kDmaChannelTx };
 
         while(mTxBusy);
         mTxBusy = true;
+        mTxBuf = data;
+        mFreeFunc = freeFunc;
+
         dma_channel_reset(Dma, chan);
         dma_set_peripheral_address(Dma, chan, (uint32_t)&(USART_DR(Base::kUsartId)));
         dma_set_memory_address(Dma, chan, (uint32_t)data);
@@ -133,8 +146,17 @@ public:
         dma_disable_transfer_complete_interrupt(Dma, chan);
         usart_disable_tx_dma(Base::kUsartId);
         dma_disable_channel(Dma, chan);
+        assert(mTxBuf);
+        if (mFreeFunc)
+            mFreeFunc((void*)mTxBuf);
+        mTxBuf = nullptr;
         mTxBusy = false;
     }
+    void sinkPrintOutput()
+    {
+        setPrintSink(dmaPrintSink, this, kPrintSinkLeaveBuffer);
+    }
+
 };
 
 template <class Base>
