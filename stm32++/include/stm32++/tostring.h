@@ -174,6 +174,7 @@ struct IntFmt
     ScalarType value;
     uint8_t padding;
     explicit IntFmt(T aVal, uint8_t aPad=0): value((ScalarType)(aVal)), padding(aPad){}
+    template <class U=T, class=typename std::enable_if<!std::is_same<ScalarType, U>::value, void>::type>
     explicit IntFmt(ScalarType aVal, uint8_t aPad=0): value(aVal), padding(aPad){}
 };
 

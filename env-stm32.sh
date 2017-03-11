@@ -50,8 +50,9 @@ alias gdb=arm-none-eabi-gdb
 alias objcopy=arm-none-eabi-objcopy
 alias gcc=arm-none-eabi-gcc
 alias g++=arm-none-eabi-g++
-alias as=arm-eabi-as
-alias nm=arm-eabi-nm
+alias as=arm-none-eabi-as
+alias nm=arm-none-eabi-nm
+alias strip=arm-none-eabi-strip
 
 echo -e "Your environment has been set up for STM32 cross-compilation.\n\n\
 SYSROOT=$STM32_SYSROOT\n

@@ -16,7 +16,7 @@ public:
     typedef uint32_t Word;
     static volatile uint32_t get() { return (volatile uint32_t)DWT_CYCCNT; }
 
-    template <class W=uint32_t>
+    template <class W=uint64_t>
     static W ticksToNs(W ticks)
     { return (ticks * 1000) / (rcc_ahb_frequency/1000000); }
 
@@ -26,7 +26,15 @@ public:
 
     template <class W=uint32_t>
     static W ticksToMs(W ticks)
-    { return (ticks * 1000) / rcc_ahb_frequency; }
+    { return ticks / (rcc_ahb_frequency/1000); }
+
+    template <class W=uint32_t>
+    static W ticksTo100Ms(W ticks)
+    { return ticks / (rcc_ahb_frequency/10); }
+
+    template <class W=uint32_t>
+    static W ticksTo10Ms(W ticks)
+    { return ticks / (rcc_ahb_frequency/100); }
 
     template <uint32_t Div, int32_t Corr>
     static volatile void delay(uint32_t t)

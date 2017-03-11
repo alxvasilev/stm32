@@ -1,13 +1,22 @@
 #include <stm32++/snprint.h>
 
-void semihostingPuts(const char* str, uint16_t len, uint8_t fd, void* userp);
+#ifndef NOT_EMBEDDED
+    void semihostingPuts(const char* str, uint16_t len, uint8_t fd, void* userp);
+    PrintSinkFunc gPrintSinkFunc = semihostingPuts;
+#else
+    void standardPuts(const char* str, uint16_t len, uint8_t fd, void* userp)
+    {
+        write(fd, str, len);
+    }
+    PrintSinkFunc gPrintSinkFunc = standardPuts;
+#endif
 
-PrintSinkFunc gPrintSinkFunc = semihostingPuts;
 void* gPrintSinkUserp = nullptr;
 
 void setPrintSink(PrintSinkFunc func, void* arg)
 {
-    gPrintSinkFunc = func; gPrintSinkUserp = arg;
+    gPrintSinkFunc = func;
+    gPrintSinkUserp = arg;
 }
 
 char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr)
@@ -30,6 +39,7 @@ char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr)
     return buf;
 }
 
+#ifndef NOT_EMBEDDED
 void semihostingPuts(const char* str, uint16_t len, uint8_t fd, void* userp)
 {
     struct Msg
@@ -48,3 +58,4 @@ void semihostingPuts(const char* str, uint16_t len, uint8_t fd, void* userp)
        : : [msg] "r" (&msg)
        : "r0", "r1", "memory");
 }
+#endif
