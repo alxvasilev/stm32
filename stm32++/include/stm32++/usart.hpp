@@ -155,6 +155,7 @@ public:
         usart_disable_tx_dma(Base::kUsartId);
         dma_disable_channel(Dma, chan);
         assert(mTxBuf);
+        //FIXME: mFreeFunc may not be reentrant
         if (mFreeFunc)
             mFreeFunc((void*)mTxBuf);
         mTxBuf = nullptr;

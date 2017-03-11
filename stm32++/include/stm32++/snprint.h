@@ -9,6 +9,12 @@
 #include "tostring.h"
 #include <assert.h>
 #include <stdlib.h>
+#ifndef NOT_EMBEDDED
+    #include "utils.hpp" //for interrupt safe stuff
+    void semihostingPrintSink(const char* str, uint32_t len, int fd=1);
+#else
+    void standardPrintSink(const char* str, uint32_t len, int fd=1);
+#endif
 
 typedef void(*PrintSinkFunc)(const char* str, uint16_t len, uint8_t fd, void* userp);
 enum: uint8_t { kPrintSinkLeaveBuffer = 1 };
@@ -17,11 +23,17 @@ void setPrintSink(PrintSinkFunc func, void* arg=0, uint8_t flags=0);
 PrintSinkFunc printSink();
 void* printSinkUserp();
 
+/** @brief This is an interrupt-safe wrapper around \c free().
+ * It is used by this lib, and should be used to free the buffer passed to
+ * the print sink in case the kPrintSinkLeaveBuffer flag is set.
+ */
+static inline void tprintf_free(void* ptr)
+{
 #ifndef NOT_EMBEDDED
-void semihostingPrintSink(const char* str, uint32_t len, int fd=1);
-#else
-void standardPrintSink(const char* str, uint32_t len, int fd=1);
+    IntDisable id;
 #endif
+    free(ptr);
+}
 
 char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr);
 
@@ -98,7 +110,7 @@ ftprintf(uint8_t fd, const char* fmtStr, Args... args)
         {
             //too much, bail out
             if (buf != sbuf)
-                free(buf);
+                tprintf_free(buf);
             return 0;
         }
         buf = (buf == sbuf)
@@ -110,16 +122,8 @@ ftprintf(uint8_t fd, const char* fmtStr, Args... args)
     uint32_t size = ret-buf;
     gPrintSinkFunc(buf, size, fd, gPrintSinkUserp);
     if ((buf != sbuf) && ((gPrintSinkFlags & kPrintSinkLeaveBuffer) == 0))
-        free(buf);
+        tprintf_free(buf);
     return size;
-}
-
-/** Use this to free the buffer passed to the print sink in case the
- * kPrintSinkLeaveBuffer flag is set
- */
-static inline void tprintf_free(void* ptr)
-{
-    free(ptr);
 }
 
 template <int32_t BufSize=64, typename ...Args>

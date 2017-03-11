@@ -1,5 +1,6 @@
 #ifndef UTILS_HPP
 #define UTILS_HPP
+#include <libopencm3/cm3/cortex.h>
 
 template <uint32_t val>
 struct CountOnes { enum: uint8_t { value = (val & 0x01) + CountOnes<(val >> 1)>::value }; };
@@ -37,19 +38,5 @@ public:
             cm_enable_interrupts();
     }
 };
-
-template <typename R, typename... Args>
-R interruptSafe(R(*func)(Args...), Args... args)
-{
-    IntDisable id;
-    return func(args...);
-}
-
-template <typename... Args>
-void interruptSafe(void(*func)(Args...), Args... args)
-{
-    IntDisable id;
-    func(args...);
-}
 
 #endif // UTILS_HPP
