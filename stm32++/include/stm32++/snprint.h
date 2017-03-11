@@ -28,7 +28,7 @@ char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr);
 template <typename Val>
 std::pair<char*, const char*> toStringf(char* buf, uint32_t bufsize, const char* fmtStr, Val val)
 {
-    if (!buf)
+    if (!buf || !fmtStr)
         return std::make_pair(nullptr, nullptr);
     assert(bufsize);
 
