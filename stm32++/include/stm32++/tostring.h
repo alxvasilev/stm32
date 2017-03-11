@@ -8,15 +8,19 @@
 
 #include <type_traits>
 #include <assert.h>
+#include <stddef.h>
 #include <stdint.h>
 
+static_assert(sizeof(size_t) == sizeof(void*));
+static_assert(sizeof(size_t) == sizeof(ptrdiff_t));
+static_assert(std::is_unsigned<size_t>::value);
 
 enum: uint8_t { kNoFlags = 0, kLowerCase = 0x0, kUpperCase = 0x10,
                 kDontNullTerminate = 0x20, kNoPrefix = 0x40};
 
 typedef uint8_t Flags;
 
-template <int base, Flags flags=kNoFlags>
+template <size_t base, Flags flags=kNoFlags>
 struct DigitConverter;
 
 template <Flags flags>
@@ -49,10 +53,10 @@ struct DigitConverter<2, flags>
     static char toDigit(uint8_t digit) { return '0'+digit; }
 };
 
-template<int base=10, Flags flags=kNoFlags, typename Val>
+template<size_t base=10, Flags flags=kNoFlags, typename Val>
 typename std::enable_if<std::is_unsigned<Val>::value
                      && std::is_integral<Val>::value, char*>::type
-toString(char* buf, uint32_t bufsize, Val val, uint8_t numDigits=0)
+toString(char* buf, size_t bufsize, Val val, uint8_t numDigits=0)
 {
     assert(buf);
     assert(bufsize);
@@ -69,8 +73,8 @@ toString(char* buf, uint32_t bufsize, Val val, uint8_t numDigits=0)
         *(writePtr++) = digitConv.toDigit(digit);
     };
 
-    uint32_t len = writePtr - stagingBuf;
-    uint32_t padLen;
+    size_t len = writePtr - stagingBuf;
+    size_t padLen;
     if (!len && !numDigits)
         padLen = 1;
     else if (len < numDigits)
@@ -109,10 +113,10 @@ toString(char* buf, uint32_t bufsize, Val val, uint8_t numDigits=0)
     return buf;
 }
 
-template<int base=10, Flags flags=kNoFlags, typename Val>
+template<size_t base=10, Flags flags=kNoFlags, typename Val>
 typename std::enable_if<std::is_integral<Val>::value &&
                         std::is_signed<Val>::value, char*>::type
-toString(char* buf, uint32_t bufsize, Val val)
+toString(char* buf, size_t bufsize, Val val)
 {
     typedef typename std::make_unsigned<Val>::type UVal;
     if (val < 0)
@@ -137,7 +141,7 @@ toString(char* buf, uint32_t bufsize, Val val)
 template <class T, class Enabled=void>
 struct is_char_ptr
 {
-    enum:bool {value = false};
+    enum: bool {value = false};
 };
 
 template<class T>
@@ -150,7 +154,7 @@ struct is_char_ptr<T, typename
     enum: bool { value = true };
 };
 
-template <class T, int Size=sizeof(T)>
+template <class T, size_t Size=sizeof(T)>
 struct UnsignedEquiv{ enum: bool {invalid = true}; };
 
 template <class T>
@@ -191,20 +195,20 @@ IntFmt<T, base, flags> fmtStruct(T aVal)
 
 template <Flags flags=kNoFlags, class P>
 typename std::enable_if<std::is_pointer<P>::value && !is_char_ptr<P>::value, char*>::type
-toString(char *buf, uint32_t bufsize, P ptr)
+toString(char *buf, size_t bufsize, P ptr)
 {
     return toString(buf, bufsize, fmtNum<16, flags>(ptr));
 }
 
 template<uint8_t base, Flags flags=kNoFlags, typename Val>
-char* toString(char *buf, uint32_t bufsize, IntFmt<Val, base, flags> num)
+char* toString(char *buf, size_t bufsize, IntFmt<Val, base, flags> num)
 {
     return toString<num.base, num.flags>(buf, bufsize, num.value, num.padding);
 }
 
 template<Flags flags=kNoFlags>
 typename std::enable_if<(flags & kDontNullTerminate) == 0, char*>::type
-toString(char* buf, uint32_t bufsize, const char* val)
+toString(char* buf, size_t bufsize, const char* val)
 {
     if (!bufsize)
         return nullptr;
@@ -225,7 +229,7 @@ toString(char* buf, uint32_t bufsize, const char* val)
 
 template<Flags flags=kNoFlags>
 typename std::enable_if<(flags & kDontNullTerminate), char*>::type
-toString(char* buf, uint32_t bufsize, const char* val)
+toString(char* buf, size_t bufsize, const char* val)
 {
     auto bufend = buf+bufsize;
     while(*val)
@@ -239,7 +243,7 @@ toString(char* buf, uint32_t bufsize, const char* val)
 
 template<Flags flags=kNoFlags>
 typename std::enable_if<flags & kDontNullTerminate, char*>::type
-toString(char* buf, uint32_t bufsize, char val)
+toString(char* buf, size_t bufsize, char val)
 {
     if(!bufsize)
         return nullptr;
@@ -250,7 +254,7 @@ toString(char* buf, uint32_t bufsize, char val)
 template<typename Val, Flags flags=kNoFlags>
 typename std::enable_if<std::is_same<Val, char>:: value
      && (flags & kDontNullTerminate) == 0, char*>::type
-toString(char* buf, uint32_t bufsize, Val val)
+toString(char* buf, size_t bufsize, Val val)
 {
     if (bufsize >= 2)
     {
@@ -268,17 +272,17 @@ toString(char* buf, uint32_t bufsize, Val val)
         return nullptr;
     }
 }
-template <uint32_t base, uint8_t p>
+template <size_t base, uint8_t p>
 struct Pow
-{  enum: uint32_t { value = base * Pow<base, p-1>::value  }; };
+{  enum: size_t { value = base * Pow<base, p-1>::value  }; };
 
-template <uint32_t base>
+template <size_t base>
 struct Pow<base, 1>
-{ enum: uint32_t { value = base }; };
+{ enum: size_t { value = base }; };
 
-template<typename Val, uint32_t Prec=6, Flags flags=kNoFlags>
+template<typename Val, size_t Prec=6, Flags flags=kNoFlags>
 typename std::enable_if<std::is_floating_point<Val>::value, char*>::type
-toString(char* buf, uint32_t bufsize, Val val, uint8_t padding=0)
+toString(char* buf, size_t bufsize, Val val, uint8_t padding=0)
 {
     if (!bufsize)
         return nullptr;
@@ -305,8 +309,8 @@ toString(char* buf, uint32_t bufsize, Val val, uint8_t padding=0)
             return nullptr;
         }
     }
-    uint32_t whole = (uint32_t)(val);
-    uint32_t decimal = (val-whole)*Pow<10, Prec>::value+0.5;
+    size_t whole = (size_t)(val);
+    size_t decimal = (val-whole)*Pow<10, Prec>::value+0.5;
 
     //we have some minimum space for null termination even if buffer is not enough
     buf = toString<10, flags>(buf, bufRealEnd-buf, whole, padding);
@@ -336,13 +340,13 @@ struct FpFmt
 };
 
 template <uint8_t aPrec, Flags aFlags=kNoFlags, class T>
-auto fmtFp(T val, uint8_t pad)
+auto fmtFp(T val, uint8_t pad=0)
 {
     return FpFmt<T, aPrec, aFlags>(val, pad);
 }
 
 template <typename Val, uint8_t aPrec, Flags aFlags>
-char* toString(char *buf, uint32_t bufsize, FpFmt<Val, aPrec, aFlags> fp)
+char* toString(char *buf, size_t bufsize, FpFmt<Val, aPrec, aFlags> fp)
 {
     return toString<Val, aPrec, aFlags>(buf, bufsize, fp.value, fp.padding);
 }
