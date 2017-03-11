@@ -16,7 +16,7 @@ void setPrintSink(PrintSinkFunc func, void* arg);
 PrintSinkFunc printSink();
 void* printSinkUserp();
 
-#ifndef NO_EMBEDDED
+#ifndef NOT_EMBEDDED
 void semihostingPrintSink(const char* str, uint32_t len, int fd=1);
 #else
 void standardPrintSink(const char* str, uint32_t len, int fd=1);
