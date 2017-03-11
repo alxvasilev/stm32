@@ -4,6 +4,7 @@
     void semihostingPuts(const char* str, uint16_t len, uint8_t fd, void* userp);
     PrintSinkFunc gPrintSinkFunc = semihostingPuts;
 #else
+    #include <unistd.h>
     void standardPuts(const char* str, uint16_t len, uint8_t fd, void* userp)
     {
         write(fd, str, len);
