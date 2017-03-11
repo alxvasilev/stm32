@@ -114,6 +114,14 @@ ftprintf(uint8_t fd, const char* fmtStr, Args... args)
     return size;
 }
 
+/** Use this to free the buffer passed to the print sink in case the
+ * kPrintSinkLeaveBuffer flag is set
+ */
+static inline void tprintf_free(void* ptr)
+{
+    free(ptr);
+}
+
 template <int32_t BufSize=64, typename ...Args>
 uint16_t tprintf(const char* fmtStr, Args... args)
 {
