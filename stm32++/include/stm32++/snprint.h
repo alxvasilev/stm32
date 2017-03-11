@@ -26,7 +26,7 @@ void standardPrintSink(const char* str, uint32_t len, int fd=1);
 char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr);
 
 template <typename Val>
-std::pair<char*, const char*> toStringf(char* buf, uint32_t bufsize, const char* fmtStr, Val val)
+std::pair<char*, const char*> _toStringf(char* buf, uint32_t bufsize, const char* fmtStr, Val val)
 {
     if (!buf)
         return std::make_pair(nullptr, nullptr);
@@ -59,15 +59,14 @@ template <typename ...Args>
 char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr, Args... args)
 {
     char* bufend = buf+bufsize;
-    std::pair<char*, const char*> ret;
+    auto state = std::make_pair(buf, fmtStr);
     std::initializer_list<char> list = {
-        (ret = toStringf(buf, bufend-buf, fmtStr, args),
-        buf=ret.first,
-        fmtStr=ret.second,
+        (state = _toStringf(buf, bufend-buf, state.second, args),
+        buf=state.first,
         (char)0)...
     };
     (void)list; //silence unused var warning
-    if (ret.second) //we still have format string contents to print
+    if (state.second) //we still have format string contents to print
         buf = toString(buf, bufend-buf, fmtStr);
 
     if (buf)
