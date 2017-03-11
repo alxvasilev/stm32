@@ -28,9 +28,10 @@ char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr);
 template <typename Val>
 std::pair<char*, const char*> toStringf(char* buf, uint32_t bufsize, const char* fmtStr, Val val)
 {
-    if (!buf || !fmtStr)
+    if (!buf)
         return std::make_pair(nullptr, nullptr);
     assert(bufsize);
+    assert(fmtStr);
 
     char* bufend = buf+bufsize; //point to last char, used for remaining bufsize calculation
     char* buflast = bufend-1; //do the loop up to this point, reserve one char for terminating null
@@ -40,7 +41,7 @@ std::pair<char*, const char*> toStringf(char* buf, uint32_t bufsize, const char*
         if (ch == 0)
         {
             *buf = 0;
-            return std::make_pair(buf, (const char*)nullptr);
+            return std::make_pair((char*)nullptr, (const char*)nullptr);
         }
         if (ch == '%')
         {
