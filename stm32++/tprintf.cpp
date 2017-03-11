@@ -20,26 +20,6 @@ void setPrintSink(PrintSinkFunc func, void* arg)
     gPrintSinkUserp = arg;
 }
 
-char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr)
-{
-    if (!buf)
-        return nullptr;
-
-    char* bufend = buf+bufsize-1;
-    while (*fmtStr)
-    {
-        if (buf >= bufend)
-        {
-            assert(buf == bufend);
-            *buf = 0;
-            return nullptr;
-        }
-        *(buf++) = *(fmtStr++);
-    }
-    *buf = 0;
-    return buf;
-}
-
 #ifndef NOT_EMBEDDED
 void semihostingPuts(const char* str, uint16_t len, uint8_t fd, void* userp)
 {

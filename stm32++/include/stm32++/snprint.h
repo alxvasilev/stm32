@@ -17,7 +17,7 @@ void setPrintSink(PrintSinkFunc func, void* arg);
 PrintSinkFunc printSink();
 void* printSinkUserp();
 
-#ifndef NO_EMBEDDED
+#ifndef NOT_EMBEDDED
 void semihostingPrintSink(const char* str, uint32_t len, int fd=1);
 #else
 void standardPrintSink(const char* str, uint32_t len, int fd=1);
@@ -67,7 +67,7 @@ char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr, Args... args)
     };
     (void)list; //silence unused var warning
     if (state.second) //we still have format string contents to print
-        buf = toString(buf, bufend-buf, fmtStr);
+        buf = toString(buf, bufend-buf, state.second);
 
     if (buf)
         *buf = 0;
