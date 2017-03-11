@@ -13,11 +13,13 @@
 #endif
 
 void* gPrintSinkUserp = nullptr;
+uint8_t gPrintSinkFlags = 0;
 
-void setPrintSink(PrintSinkFunc func, void* arg)
+void setPrintSink(PrintSinkFunc func, void* arg, uint8_t flags)
 {
     gPrintSinkFunc = func;
     gPrintSinkUserp = arg;
+    gPrintSinkFlags = flags;
 }
 
 char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr)

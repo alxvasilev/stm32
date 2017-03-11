@@ -11,8 +11,9 @@
 #include <stdlib.h>
 
 typedef void(*PrintSinkFunc)(const char* str, uint16_t len, uint8_t fd, void* userp);
+enum: uint8_t { kPrintSinkLeaveBuffer = 1 };
 
-void setPrintSink(PrintSinkFunc func, void* arg);
+void setPrintSink(PrintSinkFunc func, void* arg=0, uint8_t flags=0);
 PrintSinkFunc printSink();
 void* printSinkUserp();
 
@@ -51,24 +52,45 @@ char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr, Val val, Args..
     return nullptr;
 }
 
-template <int32_t BufSize=64, typename ...Args>
-uint16_t ftprintf(uint8_t fd, const char* fmtStr, Args... args)
+template <int32_t BufSize, typename... Args>
+typename std::enable_if<BufSize < 0, size_t>::type
+ftprintf(uint8_t fd, const char* fmtStr, Args... args)
 {
     extern PrintSinkFunc gPrintSinkFunc;
     extern void* gPrintSinkUserp;
-
-    uint16_t bufsize = BufSize & 0x7fffffff;
     char sbuf[BufSize & 0x7fffffff];
-    char* buf = sbuf;
+    char* ret = tsnprintf(sbuf, BufSize, fmtStr, args...);
+    size_t size = ret-sbuf;
+    gPrintSinkFunc(sbuf, size, fd, gPrintSinkUserp);
+    return size;
+}
+
+template <int32_t BufSize=64, typename... Args>
+typename std::enable_if<BufSize >= 0, size_t>::type
+ftprintf(uint8_t fd, const char* fmtStr, Args... args)
+{
+    extern PrintSinkFunc gPrintSinkFunc;
+    extern void* gPrintSinkUserp;
+    extern uint8_t gPrintSinkFlags;
+    size_t bufsize = BufSize;
+
+    char* sbuf;
+    char* buf;
+    if (gPrintSinkFlags & kPrintSinkLeaveBuffer)
+    {
+        sbuf = nullptr;
+        buf = (char*)malloc(BufSize);
+    }
+    else
+    {
+        buf = sbuf = (char*)alloca(BufSize);
+    }
     char* ret;
     for(;;)
     {
         ret = tsnprintf(buf, bufsize, fmtStr, args...);
         if (ret)
             break;
-
-        if (BufSize < 0) //no dynamic buffer allower
-            return 0;
 
         //have to increase buf size
         bufsize *= 2;
@@ -87,7 +109,7 @@ uint16_t ftprintf(uint8_t fd, const char* fmtStr, Args... args)
     }
     uint32_t size = ret-buf;
     gPrintSinkFunc(buf, size, fd, gPrintSinkUserp);
-    if (buf != sbuf)
+    if ((buf != sbuf) && ((gPrintSinkFlags & kPrintSinkLeaveBuffer) == 0))
         free(buf);
     return size;
 }
