@@ -106,6 +106,14 @@ protected:
     }
 public:
     volatile bool txBusy() const { return mTxBusy; }
+
+    /** @brief Initiates a DMA transfer of the buffer specified by data and
+     * size. When the transfer is complete and the specified \c freeFunc
+     * is not \c nullptr, that function will be called with the \c data
+     * param to free it. It can be used also as a completion callback.
+     * If there is already a transfer in progress, \c dmaWrite blocks until
+     * the previous transfer completes.
+     */
     bool dmaWrite(const void* data, uint16_t size, FreeFunc freeFunc)
     {
         enum { chan = Base::kDmaChannelTx };
@@ -156,7 +164,6 @@ public:
     {
         setPrintSink(dmaPrintSink, this, kPrintSinkLeaveBuffer);
     }
-
 };
 
 template <class Base>
