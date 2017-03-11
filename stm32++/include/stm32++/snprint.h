@@ -9,6 +9,7 @@
 #include "tostring.h"
 #include <assert.h>
 #include <stdlib.h>
+#include <utility>
 
 typedef void(*PrintSinkFunc)(const char* str, uint16_t len, uint8_t fd, void* userp);
 
@@ -24,31 +25,53 @@ void standardPrintSink(const char* str, uint32_t len, int fd=1);
 
 char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr);
 
-template <typename Val, typename ...Args>
-char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr, Val val, Args... args)
+template <typename Val>
+std::pair<char*, const char*> toStringf(char* buf, uint32_t bufsize, const char* fmtStr, Val val)
 {
     if (!buf)
-        return nullptr;
+        return std::make_pair(nullptr, nullptr);
     assert(bufsize);
 
-    char* bufend = buf+bufsize-1; //point to last char
+    char* bufend = buf+bufsize; //point to last char, used for remaining bufsize calculation
+    char* buflast = bufend-1; //do the loop up to this point, reserve one char for terminating null
     do
     {
         char ch = *fmtStr;
         if (ch == 0)
         {
             *buf = 0;
-            return buf;
+            return std::make_pair(buf, (const char*)nullptr);
         }
         if (ch == '%')
         {
-            buf = toString(buf, bufend-buf+1, val);
-            return tsnprintf(buf, bufend-buf+1, fmtStr+1, args...);
+            buf = toString(buf, bufend-buf, val);
+            return std::make_pair(buf, fmtStr+1);
         }
         *(buf++) = *(fmtStr++);
     }
-    while (buf < bufend);
-    return nullptr;
+    while (buf < buflast); //buf depleted(left one space of null terminator), but we still have what to print
+    *buf = 0;
+    return std::make_pair<char*, const char*>(nullptr, nullptr);
+}
+
+template <typename ...Args>
+char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr, Args... args)
+{
+    char* bufend = buf+bufsize;
+    std::pair<char*, const char*> ret;
+    std::initializer_list<char> list = {
+        (ret = toStringf(buf, bufend-buf, fmtStr, args),
+        buf=ret.first,
+        fmtStr=ret.second,
+        (char)0)...
+    };
+    (void)list; //silence unused var warning
+    if (ret.second) //we still have format string contents to print
+        buf = toString(buf, bufend-buf, fmtStr);
+
+    if (buf)
+        *buf = 0;
+    return buf;
 }
 
 template <int32_t BufSize=64, typename ...Args>
