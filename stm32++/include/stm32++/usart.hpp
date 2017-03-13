@@ -71,12 +71,20 @@ public:
     {
         USART_CR1(Base::kUsartId) |= USART_CR1_TXEIE;
     }
-    static void printSink(const char* str, uint32_t len, int fd, void* userp)
+    static void printSink(const char* str, size_t len, int fd, void* userp)
     {
         auto bufend = str+len;
         for(; str<bufend; str++)
         {
             usart_send_blocking(Base::kUsartId, *str);
+        }
+    }
+    void sendBlocking(const char* buf, size_t size)
+    {
+        const char* end = buf+size;
+        while(buf < end)
+        {
+            usart_send_blocking(Base::kUsartId, *(buf++));
         }
     }
     void sendBlocking(const char* str)
@@ -99,7 +107,7 @@ protected:
     volatile FreeFunc mFreeFunc = nullptr;
 
     typedef UsartTxDma<Base, Dma> Self;
-    static void dmaPrintSink(const char* str, uint16_t len, uint8_t fd, void* userp)
+    static void dmaPrintSink(const char* str, size_t len, int fd, void* userp)
     {
         auto& self = *static_cast<Self*>(userp);
         self.dmaWrite((const void*)str, len, tprintf_free);
@@ -182,6 +190,31 @@ public:
     {
         USART_CR1(Base::kUsartId) |= USART_CR1_RXNEIE;
     }
+    void recvBlocking(char* buf, size_t bufsize)
+    {
+        void* end = buf+bufsize;
+        while(buf < end)
+        {
+            *(buf++) = usart_recv_blocking(Base::kUsartId);
+        }
+    }
+    size_t recvLine(char* buf, size_t bufsize)
+    {
+        char* end = buf+bufsize-1;
+        char* ptr = buf;
+        while(ptr < end)
+        {
+            char ch = usart_recv_blocking(Base::kUsartId);
+            if ((ch == '\r') || (ch == '\n'))
+            {
+                *ptr = 0;
+                return ptr-buf;
+            }
+            *(ptr++) = ch;
+        }
+        *ptr = 0;
+        return (size_t)-1;
+    }
 };
 
 template<class Base, uint32_t Dma>
@@ -245,6 +278,7 @@ class Usart: public Base
 public:
     void init(uint8_t flags, uint32_t baudRate)
     {
+        rcc_periph_clock_enable(RCC_GPIOA);
         rcc_periph_clock_enable(this->kClockId);
         bool out = ((flags & kEnableOutput) && this->hasOutput());
         if (out)
@@ -271,6 +305,7 @@ public:
     }
     void stop()
     {
+        usart_disable(this->kUsartId);
         rcc_periph_clock_disable(this->kClockId);
     }
 };

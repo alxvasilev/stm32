@@ -55,7 +55,8 @@ struct DigitConverter<2, flags>
 
 template<size_t base=10, Flags flags=kNoFlags, typename Val>
 typename std::enable_if<std::is_unsigned<Val>::value
-                     && std::is_integral<Val>::value, char*>::type
+                     && std::is_integral<Val>::value
+                     && !std::is_same<Val, char>::value, char*>::type
 toString(char* buf, size_t bufsize, Val val, uint8_t numDigits=0)
 {
     assert(buf);
@@ -114,8 +115,9 @@ toString(char* buf, size_t bufsize, Val val, uint8_t numDigits=0)
 }
 
 template<size_t base=10, Flags flags=kNoFlags, typename Val>
-typename std::enable_if<std::is_integral<Val>::value &&
-                        std::is_signed<Val>::value, char*>::type
+typename std::enable_if<std::is_integral<Val>::value
+    && std::is_signed<Val>::value
+    && !std::is_same<Val, char>::value, char*>::type
 toString(char* buf, size_t bufsize, Val val)
 {
     typedef typename std::make_unsigned<Val>::type UVal;
@@ -241,9 +243,10 @@ toString(char* buf, size_t bufsize, const char* val)
     return buf;
 }
 
-template<Flags flags=kNoFlags>
-typename std::enable_if<flags & kDontNullTerminate, char*>::type
-toString(char* buf, size_t bufsize, char val)
+template<typename Val, Flags flags=kNoFlags>
+typename std::enable_if<std::is_same<Val, char>::value
+    && (flags & kDontNullTerminate), char*>::type
+toString(char* buf, size_t bufsize, Val val)
 {
     if(!bufsize)
         return nullptr;
@@ -252,8 +255,8 @@ toString(char* buf, size_t bufsize, char val)
 }
 
 template<typename Val, Flags flags=kNoFlags>
-typename std::enable_if<std::is_same<Val, char>:: value
-     && (flags & kDontNullTerminate) == 0, char*>::type
+typename std::enable_if<std::is_same<Val, char>::value
+    && (flags & kDontNullTerminate) == 0, char*>::type
 toString(char* buf, size_t bufsize, Val val)
 {
     if (bufsize >= 2)

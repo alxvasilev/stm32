@@ -11,15 +11,15 @@
 #include <stdlib.h>
 #ifndef NOT_EMBEDDED
     #include "utils.hpp" //for interrupt safe stuff
-    void semihostingPrintSink(const char* str, uint32_t len, int fd=1);
+    void semihostingPrintSink(const char* str, size_t len, int fd=1);
 #else
-    void standardPrintSink(const char* str, uint32_t len, int fd=1);
+    void standardPrintSink(const char* str, size_t len, int fd=1);
 #endif
 
-typedef void(*PrintSinkFunc)(const char* str, uint16_t len, uint8_t fd, void* userp);
+typedef void(*PrintSinkFunc)(const char* str, size_t, int fd, void* userp);
 enum: uint8_t { kPrintSinkLeaveBuffer = 1 };
 
-void setPrintSink(PrintSinkFunc func, void* arg=0, uint8_t flags=0);
+void setPrintSink(PrintSinkFunc func, void* userp=nullptr, uint8_t flags=0);
 PrintSinkFunc printSink();
 void* printSinkUserp();
 
@@ -35,10 +35,10 @@ static inline void tprintf_free(void* ptr)
     free(ptr);
 }
 
-char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr);
+char* tsnprintf(char* buf, size_t bufsize, const char* fmtStr);
 
 template <typename Val, typename ...Args>
-char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr, Val val, Args... args)
+char* tsnprintf(char* buf, size_t bufsize, const char* fmtStr, Val val, Args... args)
 {
     if (!buf)
         return nullptr;
@@ -64,7 +64,7 @@ char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr, Val val, Args..
     return nullptr;
 }
 
-template <int32_t BufSize, typename... Args>
+template <size_t BufSize, typename... Args>
 typename std::enable_if<BufSize < 0, size_t>::type
 ftprintf(uint8_t fd, const char* fmtStr, Args... args)
 {
@@ -77,7 +77,7 @@ ftprintf(uint8_t fd, const char* fmtStr, Args... args)
     return size;
 }
 
-template <int32_t BufSize=64, typename... Args>
+template <size_t BufSize=64, typename... Args>
 typename std::enable_if<BufSize >= 0, size_t>::type
 ftprintf(uint8_t fd, const char* fmtStr, Args... args)
 {
@@ -119,14 +119,14 @@ ftprintf(uint8_t fd, const char* fmtStr, Args... args)
         if (!buf)
             return 0;
     }
-    uint32_t size = ret-buf;
+    size_t size = ret-buf;
     gPrintSinkFunc(buf, size, fd, gPrintSinkUserp);
     if ((buf != sbuf) && ((gPrintSinkFlags & kPrintSinkLeaveBuffer) == 0))
         tprintf_free(buf);
     return size;
 }
 
-template <int32_t BufSize=64, typename ...Args>
+template <size_t BufSize=64, typename ...Args>
 uint16_t tprintf(const char* fmtStr, Args... args)
 {
     return ftprintf<BufSize>(1, fmtStr, args...);

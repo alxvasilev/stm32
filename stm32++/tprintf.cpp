@@ -1,11 +1,11 @@
 #include <stm32++/snprint.h>
 
 #ifndef NOT_EMBEDDED
-    void semihostingPuts(const char* str, uint16_t len, uint8_t fd, void* userp);
-    PrintSinkFunc gPrintSinkFunc = semihostingPuts;
+    #include <stm32++/semihosting.hpp>
+    PrintSinkFunc gPrintSinkFunc = shost::fputs;
 #else
     #include <unistd.h>
-    void standardPuts(const char* str, uint16_t len, uint8_t fd, void* userp)
+    void standardPuts(int fd, const char* str, size_t len, void* userp)
     {
         write(fd, str, len);
     }
@@ -15,14 +15,14 @@
 void* gPrintSinkUserp = nullptr;
 uint8_t gPrintSinkFlags = 0;
 
-void setPrintSink(PrintSinkFunc func, void* arg, uint8_t flags)
+void setPrintSink(PrintSinkFunc func, void* userp, uint8_t flags)
 {
     gPrintSinkFunc = func;
-    gPrintSinkUserp = arg;
+    gPrintSinkUserp = userp;
     gPrintSinkFlags = flags;
 }
 
-char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr)
+char* tsnprintf(char* buf, size_t bufsize, const char* fmtStr)
 {
     if (!buf)
         return nullptr;
@@ -41,24 +41,3 @@ char* tsnprintf(char* buf, uint32_t bufsize, const char* fmtStr)
     *buf = 0;
     return buf;
 }
-
-#ifndef NOT_EMBEDDED
-void semihostingPuts(const char* str, uint16_t len, uint8_t fd, void* userp)
-{
-    struct Msg
-    {
-        uint32_t fd;
-        const char* data;
-        uint32_t size;
-        Msg(uint32_t aFd, const char* aData, uint32_t aSize)
-        : fd(aFd), data(aData), size(aSize){}
-    };
-    Msg msg(1, str, len);
-    asm volatile(
-       "mov r0, #0x05;"
-       "mov r1, %[msg];"
-       "bkpt #0xAB;"
-       : : [msg] "r" (&msg)
-       : "r0", "r1", "memory");
-}
-#endif
