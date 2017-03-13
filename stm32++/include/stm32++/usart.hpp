@@ -116,7 +116,7 @@ public:
     volatile bool txBusy() const { return mTxBusy; }
 
     /** @brief Initiates a DMA transfer of the buffer specified
-     * by \c data and \c size.
+     * by the \c data and \c size paremeters.
      * When the transfer is complete and the specified \c freeFunc
      * is not \c nullptr, that function will be called with the \c data
      * param to free it. It can be used also as a completion callback.
