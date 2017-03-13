@@ -119,6 +119,7 @@ public:
      * size. When the transfer is complete and the specified \c freeFunc
      * is not \c nullptr, that function will be called with the \c data
      * param to free it. It can be used also as a completion callback.
+     * @note Note that the completion function will be called from an interrupt.
      * If there is already a transfer in progress, \c dmaWrite blocks until
      * the previous transfer completes.
      */
