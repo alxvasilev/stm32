@@ -123,7 +123,7 @@ public:
      * from an interrupt.
      * If there is already a transfer in progress, \c dmaWrite blocks until
      * the previous transfer completes (and the previous buffer is freed,
-     * in case freeFunc was provided for the previous transfer).
+     * in case \c freeFunc was provided for the previous transfer).
      */
     bool dmaWrite(const void* data, uint16_t size, FreeFunc freeFunc)
     {
