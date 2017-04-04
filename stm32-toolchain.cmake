@@ -19,7 +19,11 @@ set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS}" CACHE STRING "")
 set(CMAKE_C_FLAGS_DEBUG "-g -O0" CACHE STRING "")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0" CACHE STRING "")
 
+#defaults to 1 but can be overridden by commandline, in which case
+#this statement has no effect
+set(optUseOpencm3 1 CACHE BOOL "Use the libopencm3 platform")
 if (optUseOpencm3)
+    message(STATUS "Using OpenCM3 framework")
     set(optUseOpencm3 1 CACHE BOOL "Use the libopencm3 platform" FORCE)
     set(optChipFamily STM32F1 CACHE STRING "Chip family for opencm3")
     set_property(CACHE optChipFamily PROPERTY STRINGS STM32F0 STM32F1 STM32F2
@@ -30,10 +34,15 @@ if (optUseOpencm3)
     set(ldscriptBaseDir "${CMAKE_CURRENT_LIST_DIR}/libopencm3/lib/stm32")
     set(modeldir "${ldscriptBaseDir}/${stm32model}")
     file(GLOB ldscripts "${modeldir}/stm32*.ld")
-    set(optLinkScript "${ldscriptBaseDir}/f1/stm32f103xb.ld" CACHE STRING "")
+    set(optLinkScript "${ldscriptBaseDir}/f1/stm32f103xb.ld" CACHE STRING "Linker script")
     set_property(CACHE optLinkScript PROPERTY STRINGS ${ldscripts})
-    link_directories("${CMAKE_CURRENT_LIST_DIR}/libopencm3/lib")
+    set(linkDirs "-L${CMAKE_CURRENT_LIST_DIR}/libopencm3/lib")
     link_libraries("opencm3_stm32${stm32model}")
+# We cannot use link_directories because of a CMake quirk - it does not
+# get applied in most cases (but it does in some, probably if it is
+# executed during compiler instrospection CMake decides that the path is
+# built into the compiler driver and does not apply it).
+# see https://public.kitware.com/Bug/view.php?id=16074
     include_directories("${CMAKE_CURRENT_LIST_DIR}/libopencm3/include")
 else()
     set(optUseOpencm3 0 CACHE BOOL "Use the libopencm3 platform" FORCE)
@@ -44,23 +53,23 @@ else()
     set(optLinkScript "${defaultLinkScript}" CACHE PATH "Linker script" FORCE)
 endif()
 
-set(optNoSemihosting 0 CACHE BOOL "Disable linking to semihosting C library")
-set(optSemihostingInRelease 0 CACHE BOOL "Use semihosting in release mode (careful!)")
+set(optStdioSemihosting 0 CACHE BOOL "Link to a version of the standard C library that supports semihosting")
+set(optSemihostingInRelease 0 CACHE BOOL "Use semihosting C standard lib in release mode (careful!)")
 
 add_definitions(-D${optChipFamily} -Wall)
 include_directories("${CMAKE_CURRENT_LIST_DIR}/stm32++/include")
-set(CMAKE_EXE_LINKER_FLAGS "-nostartfiles -T${optLinkScript}" CACHE STRING "")
+set(CMAKE_EXE_LINKER_FLAGS "-nostartfiles -T${optLinkScript} ${linkDirs}" CACHE STRING "")
 
-if (NOT optNoSemihosting AND optSemihostingInRelease)
+if (optStdioSemihosting AND optSemihostingInRelease)
     set(CMAKE_EXE_LINKER_FLAGS_RELEASE "--specs=rdimon.specs -lc")
 else()
     set(CMAKE_EXE_LINKER_FLAGS_RELEASE "--specs=nosys.specs")
 endif()
 
-if (optNoSemihosting)
-    set(CMAKE_EXE_LINKER_FLAGS_DEBUG "--specs=nosys.specs" CACHE STRING "")
-else()
+if (optStdioSemihosting)
     set(CMAKE_EXE_LINKER_FLAGS_DEBUG "--specs=rdimon.specs -lc" CACHE STRING "")
+else()
+    set(CMAKE_EXE_LINKER_FLAGS_DEBUG "--specs=nosys.specs" CACHE STRING "")
 endif()
 
 set(CMAKE_FIND_ROOT_PATH "${CMAKE_SYSROOT}")
