@@ -21,7 +21,7 @@ enum: uint8_t
  kEventRepeat=2 //< Button repeat, generated when the button is held pressed
 };
 /** @brief Option flags. They apply to all pins that the Button
- *  class manages (the Pi mask)
+ *  class manages (the APins mask)
  */
 enum: uint8_t
 {
@@ -54,7 +54,7 @@ typedef void(*EventCb)(uint8_t btn, uint8_t event, void* userp);
  * @param APort The GPIO port of the button pins
  * @param APins Mask of the pins of the port that are connected to buttons
  * @param ARpt Mask of the button pins that have repeat enabled. Must be
- * a subset of Pi
+ * a subset of APins
  * @param AFlags Option flags
  * @param APollIrqN The IRQ number of an interrupt that calls the poll()
  * function. This is needed to temporarily disable the interrupt that
