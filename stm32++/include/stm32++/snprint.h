@@ -16,7 +16,7 @@
     void standardPrintSink(const char* str, size_t len, int fd=1);
 #endif
 
-typedef void(*PrintSinkFunc)(const char* str, size_t, int fd, void* userp);
+typedef void(*PrintSinkFunc)(const char* str, size_t len, int fd, void* userp);
 enum: uint8_t { kPrintSinkLeaveBuffer = 1 };
 
 void setPrintSink(PrintSinkFunc func, void* userp=nullptr, uint8_t flags=0);
@@ -30,7 +30,7 @@ void* printSinkUserp();
 static inline void tprintf_free(void* ptr)
 {
 #ifndef NOT_EMBEDDED
-    IntDisable id;
+    IntrDisable id;
 #endif
     free(ptr);
 }

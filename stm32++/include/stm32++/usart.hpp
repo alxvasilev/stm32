@@ -9,6 +9,7 @@
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/usart.h>
 #include <libopencm3/stm32/dma.h>
+#include <libopencm3/cm3/nvic.h>
 #include "snprint.h"
 #include <assert.h>
 
@@ -71,13 +72,17 @@ public:
     {
         USART_CR1(Base::kUsartId) |= USART_CR1_TXEIE;
     }
-    static void printSink(const char* str, size_t len, int fd, void* userp)
+    static void blockingPrintSink(const char* str, size_t len, int fd, void* userp)
     {
         auto bufend = str+len;
         for(; str<bufend; str++)
         {
             usart_send_blocking(Base::kUsartId, *str);
         }
+    }
+    void setBlockingPrintSink()
+    {
+        setPrintSink(blockingPrintSink);
     }
     void sendBlocking(const char* buf, size_t size)
     {
@@ -97,7 +102,15 @@ public:
     }
 };
 
-template<class Base, uint32_t Dma>
+template <uint32_t Dma, uint8_t Chan>
+constexpr uint8_t dmaIrq();
+
+template <uint32_t Dma>
+constexpr rcc_periph_clken dmaClock();
+
+enum { kOptDontEnableDmaClock = 4 }; //bits 0 and 1 denote DMA interrupt priority
+
+template<class Base, uint32_t Dma, uint32_t Opts=0>
 class UsartTxDma: public UsartTx<Base>
 {
 protected:
@@ -113,7 +126,16 @@ protected:
         self.dmaWrite((const void*)str, len, tprintf_free);
     }
 public:
+    enum: uint8_t { kTxDmaIrq = dmaIrq<Dma, Base::kDmaChannelTx>() };
     volatile bool txBusy() const { return mTxBusy; }
+    void enableOutput()
+    {
+        UsartTx<Base>::enableOutput();
+        nvic_set_priority(kTxDmaIrq, Opts & 0x03);
+        nvic_enable_irq(kTxDmaIrq);
+        if ((Opts & kOptDontEnableDmaClock) == 0)
+            rcc_periph_clock_enable(dmaClock<Dma>());
+    }
 
     /** @brief Initiates a DMA transfer of the buffer specified
      * by the \c data and \c size paremeters.
@@ -172,7 +194,7 @@ public:
         mTxBuf = nullptr;
         mTxBusy = false;
     }
-    void sinkPrintOutput()
+    void setDmaPrintSink()
     {
         setPrintSink(dmaPrintSink, this, kPrintSinkLeaveBuffer);
     }
@@ -220,13 +242,22 @@ public:
     }
 };
 
-template<class Base, uint32_t Dma>
+template<class Base, uint32_t Dma, uint32_t Opts=0>
 class UsartRxDma: public UsartRx<Base>
 {
 protected:
     volatile bool mRxBusy = false;
 public:
+    enum: uint8_t { kRxDmaIrq = dmaIrq<Dma, Base::kDmaChannelRx>() };
     volatile bool rxBusy() const { return mRxBusy; }
+    void enableInput()
+    {
+        UsartRx<Base>::enableInput();
+        nvic_set_priority(kRxDmaIrq, Opts & 0x03);
+        nvic_enable_irq(kRxDmaIrq);
+        if ((Opts & kOptDontEnableDmaClock) == 0)
+            rcc_periph_clock_enable(dmaClock<Dma>());
+    }
     bool dmaRead(const char *data, uint16_t size)
     {
         enum { chan = Base::kDmaChannelRx };
@@ -273,6 +304,13 @@ class UsartRxTx: public UsartRx<UsartTx<U>>
     using Base::Base;
 };
 
+template <class U, uint32_t Dma, uint32_t Opts=0>
+class UsartRxTxDma: public UsartRxDma<UsartTxDma<U, Dma, Opts>, Dma, Opts>
+{
+    typedef UsartRxDma<UsartTxDma<U, Dma, Opts>, Dma, Opts> Base;
+    using Base::Base;
+};
+
 enum: uint8_t { kEnableInput = 1, kEnableOutput = 2 };
 
 template <class Base>
@@ -313,5 +351,20 @@ public:
     }
 };
 
+template <>
+constexpr uint8_t dmaIrq<DMA1, 4>() { return NVIC_DMA1_CHANNEL4_IRQ; }
+template <>
+constexpr uint8_t dmaIrq<DMA1, 5>() { return NVIC_DMA1_CHANNEL5_IRQ; }
+template <>
+constexpr uint8_t dmaIrq<DMA2, 4>() { return NVIC_DMA2_CHANNEL4_5_IRQ; }
+template <>
+constexpr uint8_t dmaIrq<DMA2, 5>() { return NVIC_DMA2_CHANNEL5_IRQ; }
+
+
+template <>
+constexpr rcc_periph_clken dmaClock<DMA1>() { return RCC_DMA1; }
+
+template <>
+constexpr rcc_periph_clken dmaClock<DMA2>() { return RCC_DMA2; }
 
 #endif

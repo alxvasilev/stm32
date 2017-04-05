@@ -21,18 +21,19 @@ struct HighestBitIdx { enum: uint8_t { value = 1 + HighestBitIdx<(val >> 1)>::va
 template<>
 struct HighestBitIdx<0> { enum: uint8_t { value = 0 }; };
 
-struct IntDisable
+/** @brief Scoped global disable of interrupts */
+struct IntrDisable
 {
 protected:
     bool mWasDisabled;
 public:
-    IntDisable()
+    IntrDisable()
     : mWasDisabled(cm_is_masked_interrupts())
     {
         if (!mWasDisabled)
             cm_disable_interrupts();
     }
-    ~IntDisable()
+    ~IntrDisable()
     {
         if (!mWasDisabled)
             cm_enable_interrupts();
