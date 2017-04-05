@@ -12,7 +12,8 @@
 #include <libopencm3/cm3/nvic.h>
 #include "snprint.h"
 #include <assert.h>
-
+namespace usart
+{
 class UsartBase
 {
 protected:
@@ -366,5 +367,6 @@ constexpr rcc_periph_clken dmaClock<DMA1>() { return RCC_DMA1; }
 
 template <>
 constexpr rcc_periph_clken dmaClock<DMA2>() { return RCC_DMA2; }
+}
 
 #endif
