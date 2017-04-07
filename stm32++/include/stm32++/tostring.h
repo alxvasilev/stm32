@@ -313,8 +313,16 @@ toString(char* buf, size_t bufsize, Val val, uint8_t padding=0)
         }
     }
     size_t whole = (size_t)(val);
-    size_t decimal = (val-whole)*Pow<10, Prec>::value+0.5;
 
+    enum: uint32_t { mult = Pow<10, Prec>::value };
+    size_t decimal = (val-whole)*mult+0.5;
+    if (decimal >= mult) //the part after the dot overflows to >= 1 due to rounding
+    {
+        //move the overflowed unit to the whole part and subtract it from
+        //the decimal
+        whole++;
+        decimal-=mult;
+    }
     //we have some minimum space for null termination even if buffer is not enough
     buf = toString<10, flags>(buf, bufRealEnd-buf, whole, padding);
     if (!buf)
