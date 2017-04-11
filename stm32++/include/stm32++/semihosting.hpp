@@ -1,6 +1,17 @@
 #if !defined(SEMIHOSTING_HPP) && !defined(NOT_EMBEDDED)
 #define SEMIHOSTING_HPP
 
+#ifndef NDEBUG
+    #undef assert
+    #define assert(expr) (expr) ? (void)0 : __assert_fail(#expr, __FILE__, __LINE__)
+    static inline void __assert_fail(const char* expr, const char* file, int line)
+    {
+        tprintf("========\nAssertion failed:\n%\nat %:%\n========\n",
+                expr, file, line);
+                for(;;);
+    }
+#endif
+
 namespace shost
 {
 /** @brief Semihosting opcodes */

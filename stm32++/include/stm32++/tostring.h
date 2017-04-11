@@ -362,4 +362,41 @@ char* toString(char *buf, size_t bufsize, FpFmt<Val, aPrec, aFlags> fp)
     return toString<Val, aPrec, aFlags>(buf, bufsize, fp.value, fp.padding);
 }
 
+template <Flags aFlags=kNoFlags>
+struct RptChar
+{
+    char mChar;
+    uint16_t mCount;
+public:
+    RptChar(char ch, uint16_t count): mChar(ch), mCount(count){}
+    char ch() const { return mChar; }
+    uint16_t count() const { return mCount; }
+};
+
+template <Flags aFlags = kNoFlags>
+RptChar<aFlags> rptChar(char ch, uint16_t count)
+{
+    return RptChar<aFlags>(ch, count);
+}
+
+template <Flags aFlags=kNoFlags>
+char* toString(char* buf, size_t bufsize, RptChar<aFlags> val)
+{
+    if (!bufsize)
+        return nullptr;
+    if ((aFlags & kDontNullTerminate) == 0)
+        bufsize--;
+    if (val.count() > bufsize)
+        return nullptr;
+    char* end = buf + val.count();
+    char ch = val.ch();
+    while (buf < end)
+    {
+        *(buf++) = ch;
+    }
+    if ((aFlags & kDontNullTerminate) == 0)
+        *buf = 0;
+    return buf;
+}
+
 #endif
