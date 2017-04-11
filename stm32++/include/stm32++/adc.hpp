@@ -15,8 +15,6 @@
 #include <stm32++/timeutl.h>
 namespace nsadc
 {
-using namespace usart;
-
 enum: uint16_t {
     kOptScanMode = 1,
     kOptContConv = 2,
