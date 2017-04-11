@@ -12,7 +12,7 @@
 #include <libopencm3/cm3/nvic.h>
 #include "snprint.h"
 #include <assert.h>
-namespace usartns
+namespace nsusart
 {
 class UsartBase
 {

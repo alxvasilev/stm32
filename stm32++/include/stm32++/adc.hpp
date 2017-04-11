@@ -13,7 +13,7 @@
 #include <libopencm3/stm32/i2c.h>
 #include <stm32++/usart.hpp>
 #include <stm32++/timeutl.h>
-namespace adcns
+namespace nsadc
 {
 using namespace usart;
 
