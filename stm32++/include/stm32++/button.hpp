@@ -1,3 +1,10 @@
+/** @author Alexander Vassilev
+ * @copyright BSD License
+ */
+
+#ifndef BUTTON_HPP_INCLUDED
+#define BUTTON_HPP_INCLUDED
+
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/exti.h>
@@ -289,3 +296,4 @@ int main(void)
     return 0;
 }
 */
+#endif
