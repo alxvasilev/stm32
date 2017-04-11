@@ -3,7 +3,7 @@
  */
 
 #ifndef _USART_HPP_INCLUDED
-#define _USART_HPP_INLCUDED
+#define _USART_HPP_INCLUDED
 
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
