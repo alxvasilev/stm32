@@ -437,5 +437,4 @@ void rcc_clock_setup_in_hse_8mhz_out_56mhz()
     rcc_apb1_frequency = 28000000;
     rcc_apb2_frequency = 56000000;
 }
-
 #endif
