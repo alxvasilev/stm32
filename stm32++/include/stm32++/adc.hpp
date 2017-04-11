@@ -13,24 +13,9 @@
 #include <libopencm3/stm32/i2c.h>
 #include <stm32++/usart.hpp>
 #include <stm32++/timeutl.h>
+namespace adc
+{
 using namespace usart;
-
-static void gpio_setup(void)
-{
-	/* Enable GPIO clocks. */
-	rcc_periph_clock_enable(RCC_GPIOC);
-
-	/* Setup the LEDs. */
-    gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_50_MHZ,
-              GPIO_CNF_OUTPUT_PUSHPULL, GPIO13);
-}
-
-Usart<UsartTxDma<Usart1, DMA1>> gUsart;
-
-void dma1_channel4_isr()
-{
-    gUsart.dmaTxIsr();
-}
 
 enum: uint16_t {
     kOptScanMode = 1,
@@ -436,5 +421,6 @@ void rcc_clock_setup_in_hse_8mhz_out_56mhz()
     rcc_ahb_frequency = 56000000;
     rcc_apb1_frequency = 28000000;
     rcc_apb2_frequency = 56000000;
+}
 }
 #endif
