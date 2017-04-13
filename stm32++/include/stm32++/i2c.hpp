@@ -172,7 +172,7 @@ bool sendByte(uint8_t byte, Args... args)
     return sendByte(args...);
 }
 template <typename T>
-bool send(T data)
+bool vsend(T data)
 {
 //  tprintf("send %\n", fmtNum<16>(data));
     if (!(I2C_SR1(I2C) & I2C_SR1_TxE))
@@ -191,7 +191,7 @@ bool send(T data)
 }
 
 template <typename T, typename... Args>
-bool send(T val, Args... args)
+bool vsend(T val, Args... args)
 {
     bool ret = (sizeof(T) == 1) ? sendByte(val) : send(val);
     if (!ret)
