@@ -168,8 +168,8 @@ public:
         {
             /* Write whole page */
             mIo.startWrite(mAddr, false);
-            mIo.write(0x40);
-            mIo.writeBuf(mBuf+(W * line), W);
+            mIo.send(0x40);
+            mIo.sendBuf(mBuf+(W * line), W);
             mIo.stop();
         }
     }
@@ -177,8 +177,8 @@ public:
     void cmd(Args... args)
     {
         mIo.startWrite(mAddr);
-        mIo.write(0);
-        mIo.write(args...);
+        mIo.send(0);
+        mIo.send(args...);
         mIo.stop();
     }
 

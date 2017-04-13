@@ -9,7 +9,6 @@
 #include <libopencm3/cm3/cortex.h>
 #include <libopencm3/stm32/rcc.h>
 #include <type_traits>
-
 class DwtCounter
 {
 public:
@@ -57,15 +56,23 @@ public:
         }
         while(get() < tsEnd);
     }
+#ifndef NO_DWT_CTR_START
+protected:
+    struct Initializer
+    {
+        Initializer() { dwt_enable_cycle_counter(); }
+    };
+    static Initializer mInitializer;
+#endif
 };
 
 template <class T = DwtCounter>
-class ElapsedTimer: public T
+class GenericElapsedTimer: public T
 {
 protected:
     volatile typename T::Word mStart;
 public:
-    ElapsedTimer(): mStart(T::get()){}
+    GenericElapsedTimer(): mStart(T::get()){}
     volatile void reset() { mStart = T::get(); }
     uint32_t tsStart() const { return mStart; }
     volatile uint32_t ticksElapsed() const
@@ -76,7 +83,7 @@ public:
     volatile uint32_t usElapsed() { return T::ticksToUs(ticksElapsed()); }
     volatile uint32_t msElapsed() { return T::ticksToMs(ticksElapsed()); }
 };
-
+typedef GenericElapsedTimer<DwtCounter> ElapsedTimer;
 // Should never be actually instantiated with negative values,
 // but satisfies compiler checks.
 template <int32_t Count>
