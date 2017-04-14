@@ -105,7 +105,6 @@ void sendBuf(uint8_t* data, uint16_t count)
     {
         sendByte(*(data++));
     }
-    stop();
 }
 bool startSend(uint8_t address, bool ack=false)
 {
@@ -256,7 +255,7 @@ public:
         while(mTxBuf);
         mTxBuf = data;
         mTxBufFreeFunc = freeFunc;
-
+        rcc_periph_clock_enable(DmaInfo<I2C>::clock());
         dma_channel_reset(Dma, kDmaTxChan);
         dma_set_peripheral_address(Dma, kDmaTxChan, (uint32_t)&(I2C_DR(I2C)));
         dma_set_memory_address(Dma, kDmaTxChan, (uint32_t)data);
@@ -309,6 +308,7 @@ struct DmaInfo<I2C1>
         kDmaTxIrq = NVIC_DMA1_CHANNEL6_IRQ,
         kDmaRxIrq = NVIC_DMA1_CHANNEL7_IRQ
     };
+    static rcc_periph_clken clock() { return RCC_DMA1; }
 };
 template<>
 struct DmaInfo<I2C2>
@@ -319,5 +319,6 @@ struct DmaInfo<I2C2>
         kDmaTxIrq = NVIC_DMA1_CHANNEL4_IRQ,
         kDmaRxIrq = NVIC_DMA1_CHANNEL5_IRQ
     };
+    static rcc_periph_clken clock() { return RCC_DMA1; }
 };
 }
