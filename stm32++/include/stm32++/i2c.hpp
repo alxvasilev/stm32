@@ -99,14 +99,13 @@ void sendBuf(uint8_t* data, uint16_t count)
     {
         sendByte(*(data++));
     }
-    stop();
 }
 
-bool startWrite(uint8_t address, bool ack=false)
+bool startSend(uint8_t address, bool ack=false)
 {
     return start(address, kTxMode, ack);
 }
-bool startRead(uint8_t address, bool ack=false)
+bool startRecv(uint8_t address, bool ack=false)
 {
     return start(address, kRxMode, ack);
 }
@@ -199,19 +198,18 @@ bool vsend(T val, Args... args)
     return send(args...);
 }
 
-bool stop()
+void stop()
 {
     //wait transfer complete
     while (!(I2C_SR1(I2C) & (I2C_SR1_BTF | I2C_SR1_TxE)));
     /* Send STOP condition. */
     i2c_send_stop(I2C);
-    return 0;
 }
 
 bool isDeviceConnected(uint8_t address)
 {
     /* Try to start, function will return 0 in case device will send ACK */
-    bool connected = start(address, kTxMode, kAckEnable);
+    bool connected = startSend(address, kAckEnable);
     stop();
     return connected;
 }

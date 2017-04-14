@@ -167,7 +167,7 @@ public:
         for (uint8_t line = 0; line < H/8; line++)
         {
             /* Write whole page */
-            mIo.startWrite(mAddr, false);
+            mIo.startSend(mAddr, false);
             mIo.sendByte(0x40);
             mIo.sendBuf(mBuf+(W * line), W);
             mIo.stop();
@@ -176,7 +176,7 @@ public:
     template <class... Args>
     void cmd(Args... args)
     {
-        mIo.startWrite(mAddr);
+        mIo.startSend(mAddr);
         mIo.sendByte(0);
         mIo.sendByte(args...);
         mIo.stop();
