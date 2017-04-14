@@ -166,17 +166,15 @@ public:
 
         mIo.startSend(mAddr, false);
         mIo.sendByte(0x40);
- /*       if (mIo.hasTxDma)
+        if (mIo.hasTxDma)
         {
-            tprintf("dmaSend\n");
             mIo.dmaSend(mBuf, W*H/8, nullptr);
         }
         else
         {
-        */
             mIo.sendBuf(mBuf, W*H/8);
             mIo.stop();
-
+        }
     }
     template <class... Args>
     void cmd(Args... args)
