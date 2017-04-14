@@ -48,7 +48,7 @@ class I2c
 public:
     enum: uint32_t { I2CBase = I2C };
     enum: bool { hasTxDma = false, hasRxDma = false };
-void init(uint8_t ownAddr=0x15, bool fastMode=true)
+void init(bool fastMode=true, uint8_t ownAddr=0x15)
 {
     rcc_periph_clock_enable(RCC_GPIOB);
     I2CInfo<I2C> info;
@@ -62,32 +62,30 @@ void init(uint8_t ownAddr=0x15, bool fastMode=true)
     /* Disable the I2C before changing any configuration. */
     i2c_peripheral_disable(I2C);
     i2c_set_clock_frequency(I2C, rcc_apb1_frequency / 1000000);
-
-    /* 400KHz - I2C Fast Mode */
+    /* 400KHz */
     if (fastMode)
     {
+        // Datasheet suggests 0x1e.
         i2c_set_fast_mode(I2C);
-    /*
-     * fclock for I2C is 36MHz APB2 -> cycle time 28ns, low time at 400kHz
-     * incl trise -> Thigh = 1600ns; CCR = tlow/tcycle = 0x1C,9;
-     * Datasheet suggests 0x1e.
-     */
-        i2c_set_ccr(I2C, 0x1e);
+        uint32_t clockRatio = rcc_apb1_frequency / 400000;
+        i2c_set_ccr(I2C, (clockRatio*2+3)/6); //round clockRatio/3
         i2c_set_dutycycle(I2C, I2C_CCR_DUTY_DIV2);
-    /*
-     * fclock for I2C is 36MHz -> cycle time 28ns, rise time for
-     * 400kHz => 300ns and 100kHz => 1000ns; 300ns/28ns = 10;
-     * Incremented by 1 -> 11.
-     */
-        i2c_set_trise(I2C, 11);
+        /*
+         * rise time for 400kHz => 300ns and 100kHz => 1000ns; 300ns/28ns = 10;
+         * Incremented by 1 -> 11.
+         */
+        uint32_t clocks = 300 / ((2000000000+rcc_apb1_frequency)/(rcc_apb1_frequency*2)) + 1;
+        i2c_set_trise(I2C, clocks);
     }
-    else //standard mode 100kHz
+    else
     {
-
         i2c_set_standard_mode(I2C);
-        i2c_set_ccr(I2C1, 179);
-        i2c_set_trise(I2C1, 36);
+        uint32_t clockRatio = rcc_apb1_frequency / 100000;
+        i2c_set_ccr(I2C, clockRatio/2);
+        uint32_t clocks = 1000 / ((2000000000+rcc_apb1_frequency)/(rcc_apb1_frequency*2)) + 1;
+        i2c_set_trise(I2C, clocks);
     }
+
     /*
      * This is our slave address - needed only if we want to receive from
      * other masters.
@@ -142,11 +140,12 @@ bool start(uint8_t address, bool tx, bool ack)
     }
     assert(!(I2C_SR1(I2C) & I2C_SR1_SB));
 
+    (volatile uint32_t)I2C_SR2(I2C);
 #ifndef NDEBUG
     if (tx)
-        assert(I2C_SR2(I2C) & I2C_SR2_TRA);
+        assert(sr2 & I2C_SR2_TRA);
     else
-        assert(!(I2C_SR2(I2C) & I2C_SR2_TRA));
+        assert(!(sr2 & I2C_SR2_TRA));
 #endif
 
     assert((I2C_SR1(I2C) & I2C_SR1_ADDR) == 0);
