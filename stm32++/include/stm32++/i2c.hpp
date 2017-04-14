@@ -23,10 +23,14 @@
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/i2c.h>
+#include <libopencm3/cm3/nvic.h>
+#include <libopencm3/stm32/dma.h>
 #include <stm32++/timeutl.h>
 #include <stm32++/snprint.h>
 #include <stm32++/semihosting.hpp>
 
+namespace nsi2c
+{
 /* Private definitions */
 /** @brief Timeout for ACK of sent data. Used also for timeout for device
  * response in \c inDeviceConnected() */
@@ -42,6 +46,8 @@ template <uint32_t I2C>
 class I2c
 {
 public:
+    enum: uint32_t { I2CBase = I2C };
+    enum: bool { hasTxDma = false, hasRxDma = false };
 void init(uint8_t ownAddr=0x15, bool fastMode=true)
 {
     rcc_periph_clock_enable(RCC_GPIOB);
@@ -227,4 +233,92 @@ struct I2CInfo<I2C2>
     enum: uint16_t { kPinScl = GPIO_I2C2_SCL, kPinSda = GPIO_I2C2_SDA };
     static constexpr rcc_periph_clken clock() { return RCC_I2C2; }
 };
+template<uint32_t I2C>
+struct DmaInfo;
 
+template<uint32_t I2C>
+class I2cDma: public I2c<I2C>
+{
+public:
+    enum: bool { hasTxDma = true, hasRxDma = false };
+    typedef void(*FreeFunc)(void*);
+protected:
+    volatile void* mTxBuf = nullptr;
+    volatile FreeFunc mTxBufFreeFunc = nullptr;
+    enum: uint32_t { Dma = DmaInfo<I2C>::kDmaId };
+    enum: uint8_t { kDmaTxChan = DmaInfo<I2C>::kDmaTxChan,
+                    kDmaRxChan = DmaInfo<I2C>::kDmaRxChan };
+public:
+    using I2c<I2C>::I2c;
+    void dmaSend(uint8_t* data, uint16_t size, FreeFunc freeFunc)
+    {
+        while(mTxBuf);
+        mTxBuf = data;
+        mTxBufFreeFunc = freeFunc;
+        rcc_periph_clock_enable(DmaInfo<I2C>::clock());
+        dma_channel_reset(Dma, kDmaTxChan);
+        dma_set_peripheral_address(Dma, kDmaTxChan, (uint32_t)&(I2C_DR(I2C)));
+        dma_set_memory_address(Dma, kDmaTxChan, (uint32_t)data);
+        dma_set_number_of_data(Dma, kDmaTxChan, size);
+        dma_set_read_from_memory(Dma, kDmaTxChan);
+        dma_enable_memory_increment_mode(Dma, kDmaTxChan);
+        dma_disable_peripheral_increment_mode(Dma, kDmaTxChan);
+        dma_set_peripheral_size(Dma, kDmaTxChan, DMA_CCR_PSIZE_8BIT);
+        dma_set_memory_size(Dma, kDmaTxChan, DMA_CCR_MSIZE_8BIT);
+        dma_set_priority(Dma, kDmaTxChan, DMA_CCR_PL_HIGH); //TODO: make priority selectable
+        dma_enable_transfer_complete_interrupt(Dma, kDmaTxChan);
+        nvic_enable_irq(DmaInfo<I2C>::kDmaTxIrq);
+        dma_enable_channel(Dma, kDmaTxChan);
+        i2c_enable_dma(I2C);
+}
+
+void dmaTxIsr()
+{
+    if ((DMA_ISR(Dma) & DMA_ISR_TCIF(kDmaTxChan)) == 0)
+        return;
+
+    DMA_IFCR(Dma) |= DMA_IFCR_CTCIF(kDmaTxChan);
+    stopTxDma();
+}
+
+void stopTxDma()
+{
+    //WARNING: This can be called from an ISR
+    dma_disable_transfer_complete_interrupt(Dma, kDmaTxChan);
+    i2c_disable_dma(I2C);
+    dma_disable_channel(Dma, kDmaTxChan);
+    this->stop();
+    assert(mTxBuf);
+    //FIXME: mFreeFunc may not be reentrant
+    if (mTxBufFreeFunc)
+    {
+        mTxBufFreeFunc((void*)mTxBuf);
+        mTxBufFreeFunc = nullptr;
+    }
+    mTxBuf = nullptr;
+}
+};
+
+template<>
+struct DmaInfo<I2C1>
+{
+    enum: uint32_t { kDmaId = DMA1 };
+    enum: uint8_t {
+        kDmaTxChan = 6, kDmaRxChan = 7,
+        kDmaTxIrq = NVIC_DMA1_CHANNEL6_IRQ,
+        kDmaRxIrq = NVIC_DMA1_CHANNEL7_IRQ
+    };
+    static rcc_periph_clken clock() { return RCC_DMA1; }
+};
+template<>
+struct DmaInfo<I2C2>
+{
+    enum: uint32_t { kDmaId = DMA1 };
+    enum: uint8_t {
+        kDmaTxChan = 4, kDmaRxChan = 5,
+        kDmaTxIrq = NVIC_DMA1_CHANNEL4_IRQ,
+        kDmaRxIrq = NVIC_DMA1_CHANNEL5_IRQ
+    };
+    static rcc_periph_clken clock() { return RCC_DMA1; }
+};
+}

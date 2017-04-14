@@ -164,12 +164,15 @@ public:
         cmd(SSD1306_COLUMNADDR, 0, W-1);
         cmd(SSD1306_PAGEADDR, 0, H/8-1);
 
-        for (uint8_t line = 0; line < H/8; line++)
+        mIo.startSend(mAddr, false);
+        mIo.sendByte(0x40);
+        if (mIo.hasTxDma)
         {
-            /* Write whole page */
-            mIo.startSend(mAddr, false);
-            mIo.sendByte(0x40);
-            mIo.sendBuf(mBuf+(W * line), W);
+            mIo.dmaSend(mBuf, W*H/8, nullptr);
+        }
+        else
+        {
+            mIo.sendBuf(mBuf, W*H/8);
             mIo.stop();
         }
     }

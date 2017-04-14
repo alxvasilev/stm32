@@ -148,7 +148,7 @@ public:
      * the previous transfer completes (and the previous buffer is freed,
      * in case \c freeFunc was provided for the previous transfer).
      */
-    bool dmaWrite(const void* data, uint16_t size, FreeFunc freeFunc)
+    bool dmaSend(const void* data, uint16_t size, FreeFunc freeFunc)
     {
         enum { chan = Base::kDmaChannelTx };
 
@@ -259,7 +259,7 @@ public:
         if ((Opts & kOptDontEnableDmaClock) == 0)
             rcc_periph_clock_enable(dmaClock<Dma>());
     }
-    bool dmaRead(const char *data, uint16_t size)
+    bool dmaRecv(const char *data, uint16_t size)
     {
         enum { chan = Base::kDmaChannelRx };
 
