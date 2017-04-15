@@ -31,7 +31,7 @@ public:
     bool init()
     {
         (volatile bool)mIo.isDeviceConnected(mAddr);
-        usDelay(10);
+//      usDelay(10);
         if (!reset())
             return false;
         if (!loadCalibrationData())
