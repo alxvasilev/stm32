@@ -8,7 +8,7 @@
 template <class IO>
 class MS5611
 {
-public:
+protected:
     enum: uint8_t
     {
         kCmdReset = 0x1e,
@@ -26,6 +26,7 @@ public:
         kCalTRef = 4,
         kCalTCoeff = 5
     };
+public:
     MS5611(IO& io, uint8_t addr=0x77): mIo(io), mAddr(addr){}
     bool init()
     {
