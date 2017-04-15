@@ -153,7 +153,7 @@ bool start(uint8_t address, bool tx, bool ack)
     return true;
 }
 
-bool sendByte(uint8_t data)
+bool sendByteTimeout(uint8_t data)
 {
 //  tprintf("sendByte %\n", fmtNum<16>(data));
     if (!(I2C_SR1(I2C) & I2C_SR1_TxE))
@@ -170,17 +170,56 @@ bool sendByte(uint8_t data)
 }
 
 template <typename... Args>
+bool sendByteTimeout(uint8_t byte, Args... args)
+{
+    if (!sendByteTimeout(byte))
+        return false;
+    return sendByteTimeout(args...);
+}
+
+void sendByte(uint8_t data)
+{
+    while (!(I2C_SR1(I2C) & I2C_SR1_TxE));
+    i2c_send_data(I2C, data);
+
+}
+
+template <typename... Args>
 void sendByte(uint8_t byte, Args... args)
 {
     sendByte(byte);
     sendByte(args...);
+}
+
+template <typename T>
+bool vsendTimeout(T data)
+{
+    uint8_t* end = ((uint8_t*)&data)+sizeof(data);
+    for (uint8_t* ptr = (uint8_t*)&data; ptr<end; ptr++)
+    {
+        if (!sendByteTimeout(*ptr))
+            return false;
+    }
+}
+
+template <typename T, typename... Args>
+bool vsendTimeout(T val, Args... args)
+{
+    bool ret = (sizeof(T) == 1)
+        ? sendByteTimeout(val)
+        : sendTimeout(val);
+    if (!ret)
+        return false;
+    return sendTimeout(args...);
 }
 template <typename T>
 void vsend(T data)
 {
     uint8_t* end = ((uint8_t*)&data)+sizeof(data);
     for (uint8_t* ptr = (uint8_t*)&data; ptr<end; ptr++)
+    {
         sendByte(*ptr);
+    }
 }
 
 template <typename T, typename... Args>
@@ -193,10 +232,37 @@ void vsend(T val, Args... args)
     send(args...);
 }
 
+uint16_t recvByteTimeout()
+{
+    ElapsedTimer timer;
+    while((I2C_SR1(I2C) & I2C_SR1_RxNE) == 0)
+    {
+        if (timer.msElapsed() > kTimeoutMs)
+            return 0xffff;
+    }
+    return I2C_DR(I2C);
+}
+
 uint8_t recvByte()
 {
     while((I2C_SR1(I2C) & I2C_SR1_RxNE) == 0);
     return I2C_DR(I2C);
+
+}
+
+bool recvTimeout(uint8_t* buf, size_t count)
+{
+    uint8_t* end = buf+count;
+    while(buf < end)
+    {
+        ElapsedTimer timer;
+        while ((I2C_SR1(I2C) & I2C_SR1_RxNE) == 0)
+        {
+            if (timer.msElapsed() > kTimeoutMs)
+                return false;
+        }
+        *(buf++) = I2C_DR(I2C);
+    }
 }
 
 void recv(uint8_t* buf, size_t count)
