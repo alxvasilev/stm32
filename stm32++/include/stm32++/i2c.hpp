@@ -139,9 +139,10 @@ bool start(uint8_t address, bool tx, bool ack)
             return false;
     }
     assert(!(I2C_SR1(I2C) & I2C_SR1_SB));
-
     (volatile uint32_t)I2C_SR2(I2C);
+
 #ifndef NDEBUG
+    uint32_t sr2 = I2C_SR2(I2C);
     if (tx)
         assert(sr2 & I2C_SR2_TRA);
     else
@@ -169,44 +170,61 @@ bool sendByte(uint8_t data)
 }
 
 template <typename... Args>
-bool sendByte(uint8_t byte, Args... args)
+void sendByte(uint8_t byte, Args... args)
 {
-    if (!sendByte(byte))
-        return false;
-    return sendByte(args...);
+    sendByte(byte);
+    sendByte(args...);
 }
 template <typename T>
-bool vsend(T data)
+void vsend(T data)
 {
-//  tprintf("send %\n", fmtNum<16>(data));
-    if (!(I2C_SR1(I2C) & I2C_SR1_TxE))
-    {
-        ElapsedTimer timer;
-        while (!(I2C_SR1(I2C) & I2C_SR1_TxE))
-        {
-            if (timer.msElapsed() > kTimeoutMs)
-                return false;
-        }
-    }
     uint8_t* end = ((uint8_t*)&data)+sizeof(data);
     for (uint8_t* ptr = (uint8_t*)&data; ptr<end; ptr++)
-        i2c_send_data(I2C, *ptr);
-    return true;
+        sendByte(*ptr);
 }
 
 template <typename T, typename... Args>
-bool vsend(T val, Args... args)
+void vsend(T val, Args... args)
 {
-    bool ret = (sizeof(T) == 1) ? sendByte(val) : send(val);
-    if (!ret)
-        return false;
-    return send(args...);
+    if (sizeof(T) == 1)
+        sendByte(val);
+    else
+        send(val);
+    send(args...);
+}
+
+uint8_t recvByte()
+{
+    while((I2C_SR1(I2C) & I2C_SR1_RxNE) == 0);
+    return I2C_DR(I2C);
+}
+
+void recv(uint8_t* buf, size_t count)
+{
+    uint8_t* end = buf+count;
+    while(buf < end)
+    {
+        while ((I2C_SR1(I2C) & I2C_SR1_RxNE) == 0);
+        *(buf++) = I2C_DR(I2C);
+    }
 }
 
 void stop()
 {
     //wait transfer complete
+#ifndef NDEBUG
+    ElapsedTimer timer;
+    while (!(I2C_SR1(I2C) & (I2C_SR1_BTF | I2C_SR1_TxE)))
+    {
+        if (timer.msElapsed() > kTimeoutMs)
+        {
+            assert(false && "stop(): Timeout waiting for output flush");
+            for(;;);
+        }
+    }
+#else
     while (!(I2C_SR1(I2C) & (I2C_SR1_BTF | I2C_SR1_TxE)));
+#endif
     /* Send STOP condition. */
     i2c_send_stop(I2C);
 }
@@ -214,9 +232,19 @@ void stop()
 bool isDeviceConnected(uint8_t address)
 {
     /* Try to start, function will return 0 in case device will send ACK */
-    bool connected = startSend(address, kAckEnable);
+    bool connected = start(address, kTxMode, kAckEnable);
+    if (!connected)
+        return false;
     stop();
-    return connected;
+    return true;
+}
+
+uint8_t findFirstDevice(uint8_t from=0)
+{
+    for (uint8_t i = from; i < 128; i++)
+        if (isDeviceConnected(i))
+            return i;
+    return 0xff;
 }
 };
 
