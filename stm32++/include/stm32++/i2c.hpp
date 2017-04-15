@@ -295,6 +295,19 @@ void stop()
     i2c_send_stop(I2C);
 }
 
+bool stopTimeout()
+{
+    //wait transfer complete
+    ElapsedTimer timer;
+    while (!(I2C_SR1(I2C) & (I2C_SR1_BTF | I2C_SR1_TxE)))
+    {
+        if (timer.msElapsed() > kTimeoutMs)
+            return false;
+    }
+    i2c_send_stop(I2C);
+    return true;
+}
+
 bool isDeviceConnected(uint8_t address)
 {
     /* Try to start, function will return 0 in case device will send ACK */
