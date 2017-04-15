@@ -33,10 +33,7 @@ public:
         (volatile bool)mIo.isDeviceConnected(mAddr);
         usDelay(10);
         if (!reset())
-        {
-            dbg("ms5611 not found on I2C bus");
             return false;
-        }
         if (!loadCalibrationData())
             return false;
         return true;
