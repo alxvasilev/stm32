@@ -10,6 +10,7 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <math.h> //for padding calculation we need log10
 
 static_assert(sizeof(size_t) == sizeof(void*));
 static_assert(sizeof(size_t) == sizeof(ptrdiff_t));
@@ -184,9 +185,47 @@ struct IntFmt
     explicit IntFmt(ScalarType aVal, uint8_t aPad=0): value(aVal), padding(aPad){}
 };
 
+static inline uint8_t test(uint8_t val)
+{
+    uint8_t result = 0;
+    for (int i=0; i<val; i++)
+        result++;
+    return result;
+}
+
+template <typename T, uint8_t base>
+struct NumLenForBase
+{
+  enum: uint8_t { value = sizeof(T)*(uint8_t)(log10f(256)/log10f(base)+0.9) };
+};
+
 template <uint8_t base, Flags flags=kNoFlags, class T>
-IntFmt<T, base, flags> fmtNum(T aVal, uint8_t aPad=6)
+IntFmt<T, base, flags> fmtInt(T aVal, uint8_t aPad=NumLenForBase<T,base>::value)
 { return IntFmt<T, base, flags>(aVal, aPad); }
+
+template <Flags flags=kNoFlags, class T>
+IntFmt<T, 16, flags> fmtHex(T aVal, uint8_t aPad=NumLenForBase<T,16>::value)
+{ return IntFmt<T, 16, flags>(aVal, aPad); }
+
+template <Flags flags=kNoFlags, class T>
+IntFmt<T, 2, flags> fmtBin(T aVal, uint8_t aPad=NumLenForBase<T,2>::value)
+{ return IntFmt<T, 2, flags>(aVal, aPad); }
+
+template <Flags flags=kNoFlags>
+IntFmt<uint8_t, 16, flags> fmtHex8(uint8_t aVal, uint8_t aPad=2)
+{ return IntFmt<uint8_t, 16, flags>(aVal, aPad); }
+
+template <Flags flags=kNoFlags>
+IntFmt<uint8_t, 2, flags> fmtBin8(uint8_t aVal, uint8_t aPad=8)
+{ return IntFmt<uint8_t, 2, flags>(aVal, aPad); }
+
+template <Flags flags=kNoFlags>
+IntFmt<uint16_t, 16, flags> fmtHex16(uint16_t aVal, uint8_t aPad=4)
+{ return IntFmt<uint16_t, 16, flags>(aVal, aPad); }
+
+template <Flags flags=kNoFlags>
+IntFmt<uint16_t, 2, flags> fmtBin16(uint16_t aVal, uint8_t aPad=16)
+{ return IntFmt<uint16_t, 2, flags>(aVal, aPad); }
 
 template <uint8_t base, Flags flags=kNoFlags, class T>
 IntFmt<T, base, flags> fmtStruct(T aVal)
@@ -199,7 +238,7 @@ template <Flags flags=kNoFlags, class P>
 typename std::enable_if<std::is_pointer<P>::value && !is_char_ptr<P>::value, char*>::type
 toString(char *buf, size_t bufsize, P ptr)
 {
-    return toString(buf, bufsize, fmtNum<16, flags>(ptr));
+    return toString(buf, bufsize, fmtHex<flags>(ptr));
 }
 
 template<uint8_t base, Flags flags=kNoFlags, typename Val>

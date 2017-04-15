@@ -10,6 +10,9 @@
                 expr, file, line);
                 for(;;);
     }
+    #define dbg(fmtStr,...) tprintf(fmtStr, ##__VA_ARGS__)
+#else
+    #define dbg(fmtStr,...)
 #endif
 
 namespace shost
