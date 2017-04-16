@@ -104,7 +104,13 @@ void sendBuf(uint8_t* data, uint16_t count)
         sendByte(*(data++));
     }
 }
-/** Dummy function to allow construct of \code if (hasDma) dmaSend(...) */
+
+/** Dummy function to prevent compile errors of
+ * \code if (hasDma) dmaSend(...)
+ * even when the class has no DMA support. If an attempt is made to actually
+ * call dmaSend(), this will result in a link error because there is no
+ * implementation of \c dmaSend(), only a prototype
+ */
 void dmaSend(uint8_t* data, uint16_t count, void* freeFunc=nullptr);
 
 bool startSend(uint8_t address, bool ack=false)
