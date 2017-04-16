@@ -104,6 +104,8 @@ void sendBuf(uint8_t* data, uint16_t count)
         sendByte(*(data++));
     }
 }
+/** Dummy function to allow construct of \code if (hasDma) dmaSend(...) */
+void dmaSend(uint8_t* data, uint16_t count, void* freeFunc=nullptr);
 
 bool startSend(uint8_t address, bool ack=false)
 {

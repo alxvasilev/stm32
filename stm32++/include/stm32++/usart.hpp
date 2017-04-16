@@ -124,7 +124,7 @@ protected:
     static void dmaPrintSink(const char* str, size_t len, int fd, void* userp)
     {
         auto& self = *static_cast<Self*>(userp);
-        self.dmaWrite((const void*)str, len, tprintf_free);
+        self.dmaSend((const void*)str, len, tprintf_free);
     }
 public:
     enum: uint8_t { kTxDmaIrq = dmaIrq<Dma, Base::kDmaChannelTx>() };

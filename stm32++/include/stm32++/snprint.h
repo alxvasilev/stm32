@@ -55,7 +55,7 @@ char* tsnprintf(char* buf, size_t bufsize, const char* fmtStr, Val val, Args... 
         }
         if (ch == '%')
         {
-            buf = toString(buf, bufend-buf+1, val);
+            buf = toString<kDontNullTerminate>(buf, bufend-buf+1, val);
             return tsnprintf(buf, bufend-buf+1, fmtStr+1, args...);
         }
         *(buf++) = *(fmtStr++);
