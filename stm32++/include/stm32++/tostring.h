@@ -24,7 +24,7 @@ enum: uint16_t {
     kFlagsBaseMask = 0xff,
     kFlagsPrecMask = 0xff,
     kNoFlags = 0, kLowerCase = 0x0, kUpperCase = 0x1000,
-    kDontNullTerminate = 0x2000, kNoPrefix = 0x4000
+    kDontNullTerminate = 0x0200, kNoPrefix = 0x0400
 };
 
 typedef uint16_t Flags;
