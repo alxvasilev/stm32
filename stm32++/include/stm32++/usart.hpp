@@ -11,51 +11,62 @@
 #include <libopencm3/stm32/dma.h>
 #include <libopencm3/cm3/nvic.h>
 #include "snprint.h"
+#include "dma.hpp"
 #include <assert.h>
+namespace dma
+{
+template<>
+struct DmaInfo<USART1>: public PeriphDmaInfo<USART1, DMA1, 4, 5, 8>
+{
+    static constexpr uint32_t dataRegister() { return (uint32_t)&USART1_DR; }
+};
+template<>
+struct DmaInfo<USART2>: public PeriphDmaInfo<USART2, DMA1, 7, 6, 8>
+{
+    static constexpr uint32_t dataRegister() { return (uint32_t)&USART2_DR; }
+};
+}
+
 namespace nsusart
 {
-class UsartBase
-{
-protected:
-public:
-    static bool hasInput() { return false; }
-    static bool hasOutput() { return false; }
-    void enableInput() {}
-    void enableOutput() {}
-};
+template <uint32_t USART>
+class UsartInfo;
 
-class Usart1: public UsartBase
+template <>
+struct UsartInfo<USART1>
 {
-protected:
+    enum: uint32_t { kPeriphId = USART1 };
+    static constexpr rcc_periph_clken kClockId = RCC_USART1;
     enum: uint32_t {
       kInputPin = GPIO_USART1_RX,
       kOutputPin = GPIO_USART1_TX
     };
-    enum: uint8_t {
-      kDmaChannelTx = DMA_CHANNEL4,
-      kDmaChannelRx = DMA_CHANNEL5
-    };
-public:
-    enum: uint32_t { kUsartId = USART1 };
-    static const rcc_periph_clken kClockId = RCC_USART1;
-    using UsartBase::UsartBase;
 };
 
-class Usart2: public UsartBase
+template <>
+struct UsartInfo<USART2>
 {
+    enum: uint32_t { kPeriphId = USART2 };
+    static constexpr rcc_periph_clken kClockId = RCC_USART2;
     enum: uint32_t {
         kInputPin = GPIO_USART2_RX,
         kOutputPin = GPIO_USART2_TX
     };
-    enum: uint8_t {
-        kDmaChannelTx = DMA_CHANNEL7,
-        kDmaChannelRx = DMA_CHANNEL6
-    };
-
-public:
-    enum: uint32_t { kUsartId = USART2 };
-    static const rcc_periph_clken kClockId = RCC_USART2;
 };
+
+template <uint32_t USART>
+class UsartBase: public UsartInfo<USART>
+{
+public:
+    enum: bool { hasInput = false };
+    enum: bool { hasOutput = false };
+    enum: uint32_t { periphId = USART };
+    void enableInput() { assert(false && "There is no input"); }
+    void enableOutput() { assert (false && "There is no output"); }
+};
+
+class Usart1: public UsartBase<USART1>{};
+class Usart2: public UsartBase<USART2>{};
 
 template <class Base>
 class UsartTx: public Base
@@ -68,17 +79,18 @@ protected:
     }
 public:
     using Base::Base;
-    static bool hasOutput() { return true; }
+    typedef Base Self;
+    enum: bool { hasOutput = true };
     static void enableTxInterrupt()
     {
-        USART_CR1(Base::kUsartId) |= USART_CR1_TXEIE;
+        USART_CR1(Base::periphId) |= USART_CR1_TXEIE;
     }
     static void blockingPrintSink(const char* str, size_t len, int fd, void* userp)
     {
         auto bufend = str+len;
         for(; str<bufend; str++)
         {
-            usart_send_blocking(Base::kUsartId, *str);
+            usart_send_blocking(Self::periphId, *str);
         }
     }
     void setBlockingPrintSink()
@@ -90,29 +102,21 @@ public:
         const char* end = buf+size;
         while(buf < end)
         {
-            usart_send_blocking(Base::kUsartId, *(buf++));
+            usart_send_blocking(Base::periphId, *(buf++));
         }
     }
     void sendBlocking(const char* str)
     {
         while(*str)
         {
-            usart_send_blocking(Base::kUsartId, *str);
+            usart_send_blocking(Base::periphId, *str);
             str++;
         }
     }
 };
 
-template <uint32_t Dma, uint8_t Chan>
-constexpr uint8_t dmaIrq();
-
-template <uint32_t Dma>
-constexpr rcc_periph_clken dmaClock();
-
-enum { kOptDontEnableDmaClock = 4 }; //bits 0 and 1 denote DMA interrupt priority
-
-template<class Base, uint32_t Dma, uint32_t Opts=0>
-class UsartTxDma: public UsartTx<Base>
+template<class U, uint32_t Opts=dma::kDefaultOpts>
+class UsartTxDma: public dma::Tx<UsartTx<U>, UsartTxDma<U, Opts>, Opts>
 {
 protected:
     typedef void(*FreeFunc)(void*);
@@ -120,22 +124,19 @@ protected:
     volatile const void* mTxBuf = nullptr;
     volatile FreeFunc mFreeFunc = nullptr;
 
-    typedef UsartTxDma<Base, Dma> Self;
+    typedef UsartTxDma<U, Opts> Self;
+    typedef dma::Tx<UsartTx<U>, Self, Opts> Base;
     static void dmaPrintSink(const char* str, size_t len, int fd, void* userp)
     {
         auto& self = *static_cast<Self*>(userp);
         self.dmaSend((const void*)str, len, tprintf_free);
     }
 public:
-    enum: uint8_t { kTxDmaIrq = dmaIrq<Dma, Base::kDmaChannelTx>() };
     volatile bool txBusy() const { return mTxBusy; }
     void enableOutput()
     {
-        UsartTx<Base>::enableOutput();
-        nvic_set_priority(kTxDmaIrq, Opts & 0x03);
-        nvic_enable_irq(kTxDmaIrq);
-        if ((Opts & kOptDontEnableDmaClock) == 0)
-            rcc_periph_clock_enable(dmaClock<Dma>());
+        Base::enableOutput();
+        Self::dmaTxInit();
     }
 
     /** @brief Initiates a DMA transfer of the buffer specified
@@ -148,52 +149,15 @@ public:
      * the previous transfer completes (and the previous buffer is freed,
      * in case \c freeFunc was provided for the previous transfer).
      */
-    bool dmaSend(const void* data, uint16_t size, FreeFunc freeFunc)
+    void dmaSend(const void* data, uint16_t size, FreeFunc freeFunc)
     {
-        enum { chan = Base::kDmaChannelTx };
-
-        while(mTxBusy);
-        mTxBusy = true;
-        mTxBuf = data;
-        mFreeFunc = freeFunc;
-
-        dma_channel_reset(Dma, chan);
-        dma_set_peripheral_address(Dma, chan, (uint32_t)&(USART_DR(Base::kUsartId)));
-        dma_set_memory_address(Dma, chan, (uint32_t)data);
-        dma_set_number_of_data(Dma, chan, size);
-        dma_set_read_from_memory(Dma, chan);
-        dma_enable_memory_increment_mode(Dma, chan);
-        dma_disable_peripheral_increment_mode(Dma, chan);
-        dma_set_peripheral_size(Dma, chan, DMA_CCR_PSIZE_8BIT);
-        dma_set_memory_size(Dma, chan, DMA_CCR_MSIZE_8BIT);
-        dma_set_priority(Dma, chan, DMA_CCR_PL_VERY_HIGH);
-        dma_enable_transfer_complete_interrupt(Dma, chan);
-
-        dma_enable_channel(Dma, chan);
-        usart_enable_tx_dma(Base::kUsartId);
-        return true;
+        Base::dmaTxRequest(data, size, freeFunc);
+        usart_enable_tx_dma(Self::periphId);
     }
-    void dmaTxIsr()
+    void dmaTxStop()
     {
-        enum { chan = Base::kDmaChannelTx };
-        if ((DMA_ISR(Dma) & DMA_ISR_TCIF(chan)) == 0)
-            return;
-
-        DMA_IFCR(Dma) |= DMA_IFCR_CTCIF(chan);
-        stopTxDma();
-    }
-    void stopTxDma()
-    {
-        enum { chan = Base::kDmaChannelTx };
-        dma_disable_transfer_complete_interrupt(Dma, chan);
-        usart_disable_tx_dma(Base::kUsartId);
-        dma_disable_channel(Dma, chan);
-        assert(mTxBuf);
-        //FIXME: mFreeFunc may not be reentrant
-        if (mFreeFunc)
-            mFreeFunc((void*)mTxBuf);
-        mTxBuf = nullptr;
-        mTxBusy = false;
+        usart_disable_tx_dma(Self::periphId);
+        this->dmaTxDisable();
     }
     void setDmaPrintSink()
     {
@@ -214,14 +178,14 @@ public:
     static bool hasInput() { return true; }
     static void enableRxInterrupt()
     {
-        USART_CR1(Base::kUsartId) |= USART_CR1_RXNEIE;
+        USART_CR1(Base::periphId) |= USART_CR1_RXNEIE;
     }
     void recvBlocking(char* buf, size_t bufsize)
     {
         void* end = buf+bufsize;
         while(buf < end)
         {
-            *(buf++) = usart_recv_blocking(Base::kUsartId);
+            *(buf++) = usart_recv_blocking(Base::periphId);
         }
     }
     size_t recvLine(char* buf, size_t bufsize)
@@ -230,7 +194,7 @@ public:
         char* ptr = buf;
         while(ptr < end)
         {
-            char ch = usart_recv_blocking(Base::kUsartId);
+            char ch = usart_recv_blocking(Base::periphId);
             if ((ch == '\r') || (ch == '\n'))
             {
                 *ptr = 0;
@@ -243,76 +207,39 @@ public:
     }
 };
 
-template<class Base, uint32_t Dma, uint32_t Opts=0>
-class UsartRxDma: public UsartRx<Base>
+template<class U, uint8_t Opts=dma::kDefaultOpts>
+class UsartRxDma: public dma::Rx<UsartRx<U>, UsartRxDma<U, Opts>, Opts>
 {
 protected:
-    volatile bool mRxBusy = false;
+    typedef dma::Rx<UsartRx<U>, UsartRxDma, Opts> Base;
+    typedef UsartRxDma<U, Opts> Self;
 public:
-    enum: uint8_t { kRxDmaIrq = dmaIrq<Dma, Base::kDmaChannelRx>() };
-    volatile bool rxBusy() const { return mRxBusy; }
     void enableInput()
     {
-        UsartRx<Base>::enableInput();
-        nvic_set_priority(kRxDmaIrq, Opts & 0x03);
-        nvic_enable_irq(kRxDmaIrq);
-        if ((Opts & kOptDontEnableDmaClock) == 0)
-            rcc_periph_clock_enable(dmaClock<Dma>());
+        Base::enableInput();
+        Self::dmaRxEnable();
     }
-    bool dmaRecv(const char *data, uint16_t size)
+    void dmaRecv(const char *data, uint16_t size)
     {
-        enum { chan = Base::kDmaChannelRx };
-
-        while(mRxBusy);
-        mRxBusy = true;
-        dma_channel_reset(Dma, chan);
-        dma_set_peripheral_address(Dma, chan, (uint32_t)&(USART_DR(Base::kUsartId)));
-        dma_set_memory_address(Dma, chan, (uint32_t)data);
-        dma_set_number_of_data(Dma, chan, size);
-        dma_set_read_from_peripheral(Dma, chan);
-        dma_enable_memory_increment_mode(Dma, chan);
-        dma_disable_peripheral_increment_mode(Dma, chan);
-        dma_set_peripheral_size(Dma, chan, DMA_CCR_PSIZE_8BIT);
-        dma_set_memory_size(Dma, chan, DMA_CCR_MSIZE_8BIT);
-        dma_set_priority(Dma, chan, DMA_CCR_PL_VERY_HIGH);
-        dma_enable_transfer_complete_interrupt(Dma, chan);
-
-        dma_enable_channel(Dma, chan);
-        usart_enable_rx_dma(Base::kUsartId);
-        return true;
+        Base::dmaRxRequest(data, size);
+        usart_enable_rx_dma(Self::periphId);
     }
-    void dmaRxIsr()
+    void dmaRxStop()
     {
-        if ((DMA_ISR(Dma) & DMA_ISR_TCIF(Base::kDmaChannelRx)) == 0)
-            return;
-
-        DMA_IFCR(Dma) |= DMA_IFCR_CTCIF(Base::kDmaChannelRx);
-        stopRxDma();
-    }
-    void stopRxDma()
-    {
-        dma_disable_transfer_complete_interrupt(Dma, Base::kDmaChannelRx);
-        usart_disable_rx_dma(Base::kUsartId);
-        dma_disable_channel(Dma, Base::kDmaChannelRx);
-        mRxBusy = false;
+        usart_disable_rx_dma(Base::periphId);
+        this->dmaRxDisable();
     }
 };
 
 template <class U>
 class UsartRxTx: public UsartRx<UsartTx<U>>
-{
-    typedef UsartRx<UsartTx<U>> Base;
-    using Base::Base;
-};
+{};
 
 template <class U, uint32_t Dma, uint32_t Opts=0>
-class UsartRxTxDma: public UsartRxDma<UsartTxDma<U, Dma, Opts>, Dma, Opts>
-{
-    typedef UsartRxDma<UsartTxDma<U, Dma, Opts>, Dma, Opts> Base;
-    using Base::Base;
-};
+class UsartRxTxDma: public UsartRxDma<UsartTxDma<U, Opts>, Opts>
+{};
 
-enum: uint8_t { kEnableInput = 1, kEnableOutput = 2 };
+enum: uint8_t { kEnableRecv = 1, kEnableSend = 2 };
 
 template <class Base>
 class Usart: public Base
@@ -321,52 +248,36 @@ public:
     void init(uint8_t flags, uint32_t baudRate)
     {
         rcc_periph_clock_enable(RCC_GPIOA);
-        rcc_periph_clock_enable(this->kClockId);
-        bool out = ((flags & kEnableOutput) && this->hasOutput());
+        rcc_periph_clock_enable(Base::kClockId);
+        bool out = ((flags & kEnableSend) && this->hasOutput);
         if (out)
             this->enableOutput();
-        bool in = ((flags & kEnableInput) && this->hasInput());
+        bool in = ((flags & kEnableRecv) && this->hasInput);
         if (in)
             this->enableInput();
 
         /* Setup UART parameters. */
-        usart_set_baudrate(this->kUsartId, baudRate);
-        usart_set_databits(this->kUsartId, 8);
-        usart_set_stopbits(this->kUsartId, USART_STOPBITS_1);
+        usart_set_baudrate(this->periphId, baudRate);
+        usart_set_databits(this->periphId, 8);
+        usart_set_stopbits(this->periphId, USART_STOPBITS_1);
         uint32_t mode = in ? USART_MODE_RX : 0;
         if (out)
         {
             mode |= USART_MODE_TX;
         }
-        usart_set_mode(this->kUsartId, mode);
-        usart_set_parity(this->kUsartId, USART_PARITY_NONE);
-        usart_set_flow_control(this->kUsartId, USART_FLOWCONTROL_NONE);
+        usart_set_mode(this->periphId, mode);
+        usart_set_parity(this->periphId, USART_PARITY_NONE);
+        usart_set_flow_control(this->periphId, USART_FLOWCONTROL_NONE);
 
         /* Finally enable the USART. */
-        usart_enable(this->kUsartId);
+        usart_enable(this->periphId);
     }
     void stop()
     {
-        usart_disable(this->kUsartId);
+        usart_disable(this->periphId);
         rcc_periph_clock_disable(this->kClockId);
     }
 };
-
-template <>
-constexpr uint8_t dmaIrq<DMA1, 4>() { return NVIC_DMA1_CHANNEL4_IRQ; }
-template <>
-constexpr uint8_t dmaIrq<DMA1, 5>() { return NVIC_DMA1_CHANNEL5_IRQ; }
-template <>
-constexpr uint8_t dmaIrq<DMA2, 4>() { return NVIC_DMA2_CHANNEL4_5_IRQ; }
-template <>
-constexpr uint8_t dmaIrq<DMA2, 5>() { return NVIC_DMA2_CHANNEL5_IRQ; }
-
-
-template <>
-constexpr rcc_periph_clken dmaClock<DMA1>() { return RCC_DMA1; }
-
-template <>
-constexpr rcc_periph_clken dmaClock<DMA2>() { return RCC_DMA2; }
 }
 
 #endif

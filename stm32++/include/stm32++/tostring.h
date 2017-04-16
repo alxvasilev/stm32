@@ -28,8 +28,16 @@ enum: uint16_t {
 };
 
 typedef uint16_t Flags;
-constexpr uint8_t baseFromFlags(Flags flags) { return flags & 0xff; }
-constexpr uint8_t precFromFlags(Flags flags) { return flags & 0xff; }
+constexpr uint8_t baseFromFlags(Flags flags)
+{
+    uint8_t base = flags & 0xff;
+    return base ? base : 10;
+}
+constexpr uint8_t precFromFlags(Flags flags)
+{
+    uint8_t prec = flags & 0xff;
+    return prec ? prec : 6;
+}
 
 template <size_t base, Flags flags=kNoFlags>
 struct DigitConverter;
