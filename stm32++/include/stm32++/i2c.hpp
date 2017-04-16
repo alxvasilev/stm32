@@ -96,7 +96,7 @@ void init(bool fastMode=true, uint8_t ownAddr=0x15)
     i2c_peripheral_enable(I2C);
 }
 
-void sendBuf(uint8_t* data, uint16_t count)
+void blockingSend(uint8_t* data, uint16_t count)
 {
     uint8_t* end = data+count;
     while (data < end)

@@ -173,7 +173,7 @@ public:
         }
         else
         {
-            mIo.sendBuf(mBuf, W*H/8);
+            mIo.blockingSend(mBuf, W*H/8);
             mIo.stop();
         }
     }
