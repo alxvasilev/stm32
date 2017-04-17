@@ -149,15 +149,13 @@ public:
      * the previous transfer completes (and the previous buffer is freed,
      * in case \c freeFunc was provided for the previous transfer).
      */
-    void dmaSend(const void* data, uint16_t size, FreeFunc freeFunc)
+    void dmaStartPeripheralTx()
     {
-        Base::dmaTxRequest(data, size, freeFunc);
         usart_enable_tx_dma(Self::periphId);
     }
-    void dmaTxStop()
+    void dmaStopPeripheralTx()
     {
         usart_disable_tx_dma(Self::periphId);
-        this->dmaTxDisable();
     }
     void setDmaPrintSink()
     {

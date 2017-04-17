@@ -81,6 +81,7 @@ protected:
     volatile FreeFunc mFreeFunc = nullptr;
     typedef Tx<Base, Derived, Opts> Self;
     enum: uint8_t { kDmaTxIrq = chanIrq<Self::dmaId, Self::kDmaTxChannel>() };
+    Derived& derived() { return *static_cast<Derived*>(this); }
     void dmaTxInit()
     {
         nvic_set_priority(kDmaTxIrq, (Opts & kIrqPrioMask) >> kIrqPrioShift);
@@ -99,7 +100,7 @@ public:
      * the previous transfer completes (and the previous buffer is freed,
      * in case \c freeFunc was provided for the previous transfer).
      */
-    void dmaTxRequest(const void* data, uint16_t size, FreeFunc freeFunc)
+    void dmaSend(const void* data, uint16_t size, FreeFunc freeFunc)
     {
         enum: uint8_t { chan = Self::kDmaTxChannel };
         enum: uint32_t { dma = Self::dmaId };
@@ -121,6 +122,7 @@ public:
         dma_enable_transfer_complete_interrupt(dma, chan);
         dma_enable_channel(dma, chan);
         //have to enable DMA for peripheral at the upper level and the transfer should start
+        derived().dmaStartPeripheralTx();
     }
     volatile bool txBusy() const { return mTxBusy; }
     void dmaTxIsr()
@@ -129,12 +131,13 @@ public:
             return;
 
         DMA_IFCR(Self::dmaId) |= DMA_IFCR_CTCIF(Self::kDmaTxChannel);
-        static_cast<Derived*>(this)->dmaTxStop();
+        dmaTxStop();
     }
-    void dmaTxDisable()
+    void dmaTxStop()
     {
         //good to disable dma in peripheral before calling this
         dma_disable_transfer_complete_interrupt(Self::dmaId, Self::kDmaTxChannel);
+        derived().dmaStopPeripheralTx();
         dma_disable_channel(Self::dmaId, Self::kDmaTxChannel);
         assert(mTxBuf);
         //FIXME: mFreeFunc may not be reentrant
@@ -153,6 +156,7 @@ class Rx: public Base, public DmaInfo<Base::periphId>
 protected:
     volatile bool mRxBusy = false;
     typedef Rx<Base, Derived, Opts> Self;
+    Derived& derived() { return *static_cast<Derived*>(this); }
 public:
     volatile bool rxBusy() const { return mRxBusy; }
     void dmaRxInit()
@@ -162,7 +166,7 @@ public:
         if ((Opts & kDontEnableClock) == 0)
             rcc_periph_clock_enable(Self::dmaClock);
     }
-    void dmaRxRequest(const char *data, uint16_t size)
+    void dmaRecv(const char *data, uint16_t size)
     {
         enum: uint8_t { chan = Self::kDmaChannelRx };
         enum: uint32_t { dma = Self::dmaId };
@@ -180,6 +184,7 @@ public:
         dma_set_priority(dma, chan, ((Opts & kPrioMask) << kPrioShift) << DMA_CCR_PL_SHIFT);
         dma_enable_transfer_complete_interrupt(dma, chan);
         dma_enable_channel(dma, chan);
+        derived().enablePeripheralRx();
     }
     void dmaRxIsr()
     {
@@ -187,11 +192,12 @@ public:
             return;
 
         DMA_IFCR(Self::dmaId) |= DMA_IFCR_CTCIF(Self::kDmaRcChan);
-        static_cast<Derived*>(this)->stopTxDma();
+        dmaRxStop();
     }
-    void dmaRxDisable()
+    void dmaRxStop()
     {
         dma_disable_transfer_complete_interrupt(Self::dmaId, Self::kDmaRxChan);
+        derived().dmaStopPeripheralRx();
         dma_disable_channel(Self::dmaId, Self::kDmaRxChan);
         mRxBusy = false;
     }

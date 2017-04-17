@@ -355,16 +355,11 @@ public:
     enum: bool { hasTxDma = true, hasRxDma = false };
     typedef void(*FreeFunc)(void*);
     using I2c<I2C>::I2c;
-    void dmaSend(uint8_t* data, uint16_t size, FreeFunc freeFunc)
-    {
-        this->dmaTxRequest(data, size, freeFunc);
-        i2c_enable_dma(I2C);
-    }
-    void dmaTxStop()
+    void dmaStartPeripheralTx() { i2c_enable_dma(I2C); }
+    void dmaStopPeripheralTx()
     {
     //WARNING: This can be called from an ISR
         i2c_disable_dma(I2C);
-        this->dmaTxDisable();
         this->stop();
     }
 };

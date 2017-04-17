@@ -224,9 +224,9 @@ void setPixel(uint16_t x, uint16_t y, uint8_t color)
 	/* Set color */
     if (color == kColorWhite) {
         mBuf[x + (y / 8) * W] |= 1 << (y % 8);
-	} else {
+    } else {
         mBuf[x + (y / 8) * W] &= ~(1 << (y % 8));
-	}
+    }
 }
 
 void gotoXY(uint16_t x, uint16_t y)
