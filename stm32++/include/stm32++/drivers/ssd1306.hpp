@@ -25,7 +25,7 @@
 
 #include <libopencm3/stm32/i2c.h>
 #include <stm32++/timeutl.h>
-#include "fonts.h"
+#include <stm32++/font.hpp>
 
 #define SSD1306_SETCONTRAST 0x81
 #define SSD1306_DISPLAYALLON_RESUME 0xA4
@@ -76,19 +76,32 @@
 /* Absolute value */
 #define ABS(x)   ((x) > 0 ? (x) : -(x))
 
-enum: uint8_t { kColorBlack = 0, kColorWhite=1};
+enum Color: uint8_t
+{
+    kColorBlack = 0,
+    kColorWhite = 1
+};
 enum { kOptExternVcc = 1 };
 template <class IO, uint16_t W, uint16_t H, uint8_t Opts=0>
 class SSD1306
 {
 protected:
-    enum: uint8_t {kStateInitialized = 1, kStateInverted = 2};
+    enum: uint8_t {
+        kFontHspaceMask = 0x3,
+        kFontHspaceOff = 0,
+        kFontHspace1 = 1,
+        kFontHspace2 = 2,
+        kFontHspace3 = 3,
+        kStateInitialized = 4,
+        kStateInverted = 8
+    };
     /* SSD1306 data buffer */
-    uint8_t mBuf[W * H / 8];
+    enum: uint16_t { kBufSize = W * H / 8 };
+    uint8_t mBuf[kBufSize];
     IO& mIo;
     uint16_t mCurrentX;
     uint16_t mCurrentY;
-    uint8_t mState = 0;
+    uint8_t mState = kFontHspace2;
     uint8_t mAddr;
     constexpr static uint16_t mkType(uint8_t w, uint8_t h) { return (w << 8) | h; }
 public:
@@ -153,7 +166,7 @@ public:
         mCurrentY = 0;
 
         /* Initialized OK */
-        mState = kStateInitialized;
+        mState |= kStateInitialized;
         return true;
     }
     void setContrast(uint8_t val)
@@ -203,7 +216,8 @@ void SSD1306_ToggleInvert(void) {
 	}
 }
 
-void fill(uint8_t color) {
+void fill(Color color)
+{
 	/* Set memory */
     memset(mBuf, (color == kColorBlack) ? 0x00 : 0xFF, sizeof(mBuf));
 }
@@ -236,60 +250,99 @@ void gotoXY(uint16_t x, uint16_t y)
     mCurrentY = y;
 }
 
-bool putc(char ch, FontDef_t& font, uint8_t color)
+bool putc(char ch, const Font& font, Color color=kColorWhite)
 {
-	uint32_t i, b, j;
-	
-	/* Check available space in LCD */
-    if (W <= (mCurrentX + font.FontWidth) ||
-        H <= (mCurrentY + font.FontHeight))
+    uint8_t ofs = (mCurrentY % 8); //offset within the vertical byte
+    uint8_t w = font.width;
+    const uint8_t* sym = font.data + (ch - 32) * w;
+    auto writeOfs = (mCurrentY >> 3)*W + mCurrentX; //divide by 8
+    uint8_t* bufDest = mBuf+writeOfs;
+
+    uint8_t writeWidth;
+    bool ret;
+    if (mCurrentX+w < W)
     {
-		/* Error */
-        return false;
-	}
-	
-	/* Go through font */
-    auto sym = font.data+(ch - 32) * font.FontHeight;
-    for (i = 0; i < font.FontHeight; i++)
+        writeWidth = w;
+        ret = true;
+    }
+    else
     {
-        b = sym[i];
-        for (j = 0; j < font.FontWidth; j++)
+        writeWidth = W - mCurrentX;
+        ret = false;
+    }
+    uint8_t symPages = (font.height+7)/8;
+    if (ofs == 0)
+    {
+        for (int page = 0; page<symPages; page++)
         {
-            if ((b << j) & 0x8000)
+            memcpy(bufDest+page*W, sym+page*w, writeWidth);
+        }
+    }
+    else
+    {
+        uint8_t fullLineMask = 0xff << ofs;
+        uint8_t wmask = (font.height <= 8)
+             ? ((1 << font.height)-1) << ofs
+             : fullLineMask;
+        uint8_t* wptr = bufDest;
+        uint8_t* wend = wptr+writeWidth;
+        const uint8_t* rptr = sym;
+        while(wptr < wend)
+        {
+            uint8_t b = *wptr;
+            b = (b &~ wmask) | ((*(rptr++) << ofs) & wmask);
+            *(wptr++) = b;
+        }
+        if (ofs + font.height <= 8)
+            return ret; //we don't span on the next pages(lines)
+
+        uint8_t wpage = 1;
+        uint8_t eightMinusOfs = 8-ofs;
+        uint8_t spanMask = ((uint16_t)1<<(eightMinusOfs+1))-1;
+        wptr = bufDest+wpage*W;
+        wend = wptr+writeWidth;
+        assert(wend <= mBuf+kBufSize);
+
+        for (int rpage = 0; rpage < symPages; rpage++)
+        {
+            rptr = sym+rpage*w;
+            while(wptr < wend)
             {
-                setPixel(mCurrentX + j, (mCurrentY + i), color);
+                uint8_t b = *wptr;
+                if (wpage > rpage)
+                {
+                    uint8_t wmask = spanMask;
+                    b = (b &~ wmask) | (*(rptr++) >> eightMinusOfs);
+                }
+                else
+                {
+                    uint8_t wmask = (rpage < symPages-1)
+                       ? fullLineMask
+                       : ((1<<((font.height % 8)+1))-1) << ofs; //calculated only once
+                    b = (b &~ wmask) | ((*(rptr++) << ofs) & wmask);
+                    wpage++;
+                    wptr = bufDest+wpage*W;
+                    wend = wptr+writeWidth;
+                    assert(wend <= mBuf+kBufSize);
+                }
+                *(wptr++) = b;
             }
-            else
-            {
-                setPixel(mCurrentX + j, (mCurrentY + i), !color);
-			}
-		}
-	}
-	
-	/* Increase pointer */
-    mCurrentX += font.FontWidth;
-	
-	/* Return character written */
-	return ch;
+        }
+    }
+    mCurrentX += writeWidth + (mState&kFontHspaceMask);
+    return ret;
 }
 
-bool puts(const char* str, FontDef_t& font, uint8_t color)
+template <class F>
+bool puts(const char* str, const F& font, Color color=kColorWhite)
 {
-	/* Write characters */
     while (*str)
     {
 		/* Write character by character */
         if (!putc(*str, font, color))
-        {
-            /* Return error */
             return false;
-		}
-		
-		/* Increase string pointer */
 		str++;
 	}
-	
-	/* Everything OK, zero should be returned */
     return true;
 }
  
