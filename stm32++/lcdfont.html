@@ -1,0 +1,190 @@
+<html>
+<style>
+.glyph {
+    display: inline-block;
+    float: left;
+    vertical-align: top;
+}
+#main {
+    display: flex;
+    flex-flow: row
+}
+#editor {
+    flex: 0, 0, auto;
+}
+#glyphContainer {
+    flex: 0 0 auto;
+    overflow: auto;
+    height: 100%;
+}
+#spacer {
+    flex: 1 1 auto;
+}
+</style>
+
+<script language=javascript>
+const kColorFg = "black";
+const kColorBg = "white";
+function GlyphModel(w, h)
+{
+    this.width = w;
+    this.height = h;
+    this.rows = new Array(h);
+    for (var r=0; r<h; r++) {
+        var row = this.rows[r] = new Array(w);
+        for (var c=0; c<w; c++) {
+           row[c] = false;
+        }
+    }
+    this.listeners = new Array();
+}
+
+GlyphModel.prototype.flip = function(x, y) {
+    var row = this.rows[y];
+    var val = row[x] = !row[x];
+    var count = this.listeners.length;
+    for (var i=0; i<count; i++) {
+        this.listeners[i].updatePixel(x, y, val);
+    }
+}
+GlyphModel.prototype.set = function(x,y,val) {
+    var row = this.rows[y];
+    var oldVal = row[x];
+    if (val === oldVal)
+        return;
+    row[x] = val;
+    var count = this.listeners.length;
+    for (var i=0; i<count; i++) {
+        this.listeners[i].updatePixel(x, y, val);
+    }
+}
+
+GlyphModel.prototype.addListener = function(obj) {
+    this.listeners.push(obj);
+}
+GlyphModel.prototype.removeListener = function(obj) {
+    var idx = this.listeners.indexOf(obj);
+    if (idx < 0)
+        return false;
+    this.listeners.splice(idx, 1);
+    return true;
+}
+var gDragged = null;
+
+function GlyphView(model, w, h, active, border)
+{
+    var self = this;
+    self.model = model;
+    var cw = (w / model.width)|0;
+    var ch = (h / model.height)|0;
+    var view = self.widget = document.createElement('table');
+    view.style.borderSpacing = 0;
+    view.style.border = "1px solid #eeeeee";
+    var rows = model.rows;
+    var rowCnt = rows.length;
+    var colCnt = rows[0].length;
+    for (var y = 0; y < rowCnt; y++) {
+        var row = view.insertRow(-1);
+        row.style.height=ch;
+        var rowData = model.rows[y];
+        for (var x = 0; x < colCnt; x++) {
+            var cell = row.insertCell(-1);
+            //cell.appendChild(document.createTextNode());
+            var cellData = rowData[x];
+            var style = cell.style;
+            style.width=cw;
+            style.backgroundColor = cellData ? kColorFg : kColorBg;
+            style.padding = 0;
+            if (border) {
+                style.border = '1px solid #eeeeee';
+            } else {
+                style.border = '0px';
+            }
+            cell.x = x;
+            cell.y = y;
+            if (active) {
+                cell.onclick = function(event) {
+                    var c = event.target;
+                    self.model.flip(c.x,c.y);
+                }
+                cell.ondragstart = function(event) {
+                    // store a ref. on the dragged elem
+                    gDragged = event.target;
+                    // make it half transparent
+                };
+                cell.ondragover = function(event) {
+                    if (!gDragged)
+                        return;
+                    var val = (gDragged.style.backgroundColor === kColorBg) ? 0 : 1;
+                    var target = event.target;
+                    self.model.set(target.x, target.y, val);
+                }
+            }
+        }
+    }
+    model.addListener(self);
+}
+
+GlyphView.prototype.updatePixel = function(x,y,val) {
+    var row = this.widget.rows[y];
+    row.cells[x].style.backgroundColor = val ? kColorFg : kColorBg;
+}
+
+GlyphView.prototype.changeModel = function(model) {
+    this.model.removeListener(this);
+    this.model = model;
+    var h = this.widget.rows.length;
+    var w = this.widget.rows[0].cells.length;
+    if (h !== model.height || w !== model.width) {
+        throw new Error("changeModel: new model has different dimensions");
+    }
+    for (var y = 0; y < h; y++) {
+        var row = this.widget.rows[y];
+        var rowData = model.rows[y];
+        for (var x = 0; x < w; x++) {
+            row.cells[x].style.backgroundColor = rowData[x] ? kColorFg : kColorBg;
+        }
+    }
+    model.addListener(this);
+}
+var gEditor = null;
+window.onload = function() {
+    var glyphCount = 100;
+    var glyphCols = ((window.innerWidth-400)/64)|0;
+    var glyphTableHeight = glyphCount/glyphCols;
+    var glyphs = document.getElementById('glyphs');
+    var list = [];
+    for (var i=0; i<glyphTableHeight; i++) {
+        glyphs.insertRow();
+    }
+    for (var col = 0; col < glyphCols; col++) {
+        for (var i=0; i<glyphTableHeight; i++) {
+            var model = new GlyphModel(8,8);
+            var view = new GlyphView(model, 64,64, false);
+            view.widget.model = model; //make the model accessible from the onclick handler
+            list.push(view);
+            var row = glyphs.rows[i];
+            var cell = row.insertCell();
+            cell.appendChild(view.widget);
+            view.widget.onclick = function(event) {
+                gEditor.changeModel(event.currentTarget.model);
+            }
+        }
+    }
+    gEditor = new GlyphView(list[0].model, 300, 300, true);
+    document.getElementById('editor').appendChild(gEditor.widget);
+
+}
+</script>
+<head>
+</head>
+<body>
+<div id=main>
+   <div id='editor' class=glyph></div>
+   <div id=spacer></div>
+   <div id=glyphContainer>
+       <table id='glyphs'>
+       </table>
+   </div>
+</div>
+</body>
