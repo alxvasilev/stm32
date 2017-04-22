@@ -1,5 +1,7 @@
 <html>
+<head>
 <style>
+
 .glyph {
     display: inline-block;
     float: left;
@@ -7,7 +9,7 @@
 }
 #main {
     display: flex;
-    flex-flow: row
+    flex-flow: row;
 }
 #menu {
     display: flex;
@@ -19,6 +21,8 @@
     display: flex;
     flex-flow: column;
     height: 100%;
+    user-select: none;
+    cursor: default;
 }
 #editorGroup {
     flex: 0 0 auto;
@@ -29,7 +33,7 @@
    flex: 0 0 auto;
    border: 1px solid #eeeeee
 }
-#txtPreview, #typingArea {
+#typingArea {
     flex: 0 0 auto;
     border: 1px solid #eeeeee
 }
@@ -57,8 +61,58 @@
     border-right: 1px solid #eeeeee;
     border-bottom: 1px solid #eeeeee;
 }
-</style>
+.openCaption {
+    text-align: center;
+    font-size: 44px;
+    flex: 0 0 auto;
+    padding-top: 15px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #eeeeee;
+}
 
+.openBtnPanel {
+    flex: 0 0 auto;
+    display: flex;
+    flex-flow: row;
+}
+
+.openModeSection {
+    flex: 1 1 50%;
+    flex-flow: column;
+    justify-content: space-around;
+}
+
+.openBtn {
+    flex: 0 0 auto;
+    align-self: center;
+    text-align: center;
+    border-radius: 8px;
+    border: 2px solid #eeeeee;
+    padding: 10px;
+    cursor: hand;
+    font-size: 20px;
+}
+.openBtn:hover {
+    background: lightblue;
+}
+.openOptions {
+    flex: 0 0 auto;
+    align-self: center;
+    display: flex;
+    flex-flow: column;
+}
+.fontSelect {
+    flex: 0 0 auto;
+    align-self: center;
+}
+.borderBottomRight {
+   border-bottom: 1px solid #eeeeee;
+   border-right: 1px solid #eeeeee;
+}
+</style>
+</head>
+<body id=page>
+</body>
 <script language=javascript>
 const kColorFg = "black";
 const kColorBg = "white";
@@ -189,10 +243,48 @@ GlyphView.prototype.changeModel = function(model) {
 
 var glyphs = [];
 var lcdLetters = [];
+var fontWidth = 8;
+var fontHeight = 10;
 
 var gEditor = null;
 var glyphCont = null;
-window.onload = function() {
+var editorHtml =
+"<div id=pageDiv>\
+   <div id=menu>menu</div>\
+   <div id=main>\
+     <div id=editorGroup>\
+       <div id=editor></div>\
+       <div align=center>LCD preview:</div>\
+       <div style='position:relative'>\
+       <div id=lcd></div>\
+       </div>\
+       <textarea id=typingArea></textarea>\
+     </div>\
+   <div id= spacer></div>\
+   <div id= glyphs></div>\
+ </div>\
+</div>";
+
+var loadGui =
+"<div id=pageDiv>\
+  <div class=openCaption>Load font:</div>\
+  <div style='flex: 0 0 10%'> </div>\
+  <table width=100%>\
+    <tr>\
+      <td style='width:50%'>\
+        <div class=openBtn>From file</div></td>\
+      <td style='width:50%'>\
+        <div class=openBtn onclick='fontSelectGui();'>Capture</div>\
+      </td>\
+    </tr>\
+    <tr>\
+      <td><div></div>\
+      <td><div id=captureOptions class=openOptions></div>\
+    </tr>\
+  </table>";
+
+function loadEditor() {
+    document.getElementById('page').innerHTML = editorHtml;
     glyphCont = document.getElementById('glyphs');
     var glyphCount = 200;
     for (var i = 0; i < glyphCount; i++) {
@@ -211,7 +303,7 @@ window.onload = function() {
     document.getElementById('editor').appendChild(gEditor.widget);
     var txtInput = document.getElementById('typingArea');
     txtInput.onkeypress = function(event) {
-        var idx = event.keyCode - 32;
+        var idx = event.charCode - 32;
         if (idx < 0 || idx >= glyphs.length)
             return;
         var model = glyphs[0]; //[idx];
@@ -229,23 +321,205 @@ window.onload = function() {
        }
    }
 }
+
+function fontOpenGui() {
+    document.getElementById("page").innerHTML = loadGui;
+}
+
+var standardFonts = ['arial', 'serif', 'sans-serif', 'monospace', 'Monaco, Lucida Console, monospace'];
+/*
+//Sans serif
+'Arial, 'Arial Black', 'Tahoma', 'Trebuchet MS',
+'Century Gothic', 'Geneva', 'Lucida','Lucida Sans', 'Lucida Grande',
+//Serif
+'Georgia', 'Times', 'Times New Roman',
+'MS Serif', 'New York', 'Palatino', 'Palatino Linotype', 'Verdana',
+//monospace
+'Courier', 'Courier New', 'Lucida Console', 'Monaco'
+*/
+
+function fontSelectGui() {
+   var cont = document.getElementById('captureOptions');
+   while (cont.firstChild)
+       cont.removeChild(cont.firstChild);
+   cont.innerHTML =
+   "<table width=100%>\
+   <tr>\
+       <td id=localFont width=50% class=borderBottomRight></td>\
+       <td id=remoteFont width=50% class=borderBottomRight></td></tr>\
+   <tr><td colspan=2 id=images style='display: flex; flex-flow: row' align=center><canvas id=capture width=200 height=130\
+       style='width:200; height: 130; align-senf: center' />\
+   </td></tr>"
+   var table = document.createElement("table");
+   table.className = 'fontSelect';
+   var len = standardFonts.length;
+   for (var i=0; i<len; i++) {
+       var n = standardFonts[i];
+       var cell = table.insertRow(-1).insertCell(-1);
+       cell.style.fontFamily = n;
+       cell.onclick = function(event) {
+           captureFont(event.currentTarget.style.fontFamily);
+       }
+       cell.appendChild(document.createTextNode(n));
+   }
+   document.getElementById('localFont').appendChild(table);
+   var button = document.createElement('input');
+   button.type = 'button';
+   button.value = "Font from URL...";
+   button.onclick = loadRemoteFont;
+   document.getElementById('remoteFont').appendChild(button);
+}
+
+var remoteFontUrl = '';
+function loadRemoteFont() {
+    remoteFontUrl = prompt("Enter font URL", remoteFontUrl);
+}
+function captureFont(font) {
+    var images = document.getElementById('images');
+    var view = null;
+    var ctx = document.getElementById('capture').getContext("2d");
+    psize = (128 / fontHeight)|0;
+    fontPt = psize * fontHeight;
+    var opts = { psize: psize, fontPt: fontPt};
+    ch=34;
+
+    setInterval(function() {
+        var model = captureGlyph(ctx, font, String.fromCharCode(ch++), opts);
+        if (view) {
+            images.removeChild(images.lastChild);
+        }
+        view = new GlyphView(model, 8 ,{active:false, border: '1px solid #eeeeee'});
+        images.appendChild(view.widget);
+    }, 4000);
+}
+
+function captureGlyph(ctx, font, ch, opts)
+{
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, 200, 130);
+    ctx.fillStyle = 'black';
+    ctx.font = opts.fontPt+"pt "+font;
+    ctx.fillText('$', 1, fontPt);
+    var data = ctx.getImageData(0,0,200,130).data;
+    //scan right vertical border
+    var l = scanLeftBorder(data);
+    var t = scanTopBorder(data);
+    var r = scanRightBorder(data);
+    var b = scanBottomBorder(data);
+    var width = r-l+1;
+    var height = b-t+1;
+    data = ctx.getImageData(l,t, width, height);
+    var modelW = ((width+opts.psize-1)/opts.psize)|0;
+    ctx.strokeStyle = '#ff0000';
+    ctx.lineWidth = 1;
+
+    for (var x = 0; x <= modelW; x++) {
+        ctx.beginPath();
+        ctx.moveTo(l+x*psize, t);
+        ctx.lineTo(l+x*psize, b);
+        ctx.stroke();
+    }
+    for (var y=0; y<=fontHeight; y++) {
+        ctx.beginPath();
+        ctx.moveTo(l, t+y*psize);
+        ctx.lineTo(r, t+y*psize);
+        ctx.stroke();
+    }
+    var model = new GlyphModel(modelW, fontHeight);
+    console.log(l, t, r, b);
+    for (var y=0; y<fontHeight; y++) {
+        var row = model.rows[y];
+        for (var x=0; x<modelW; x++) {
+            var val = row[x] = estimatePixel(data, x, y, opts.psize);
+        }
+    }
+    return model;
+
+/*
+    putPixel(ctx, l,t, 255,0,0,255);
+    putPixel(ctx, l,b, 255,0,0,255);
+    putPixel(ctx, r,t, 255,0,0,255);
+    putPixel(ctx, r,b, 255,0,0,255);
+*/
+}
+function putPixel(ctx, x, y, r,g,b,a) {
+    var pixel = ctx.createImageData(1,1);
+    var d = pixel.data;
+    d[0] = r;
+    d[1] = g;
+    d[2] = b;
+    d[3] = a;
+    ctx.putImageData(pixel, x, y);
+}
+
+function estimatePixel(img, sx, sy, psize) {
+    var w=img.width;
+    sx *= psize;
+    sy *= psize;
+    var ex = sx+psize;
+    var trunc;
+    if (ex > w) {
+        trunc = (ex-w)/psize; //ratio of truncation, needed for pixel fill estimation
+        ex = w;
+    } else {
+        trunc = 0;
+    }
+    var ey = sy+psize;
+    var cnt = 0;
+    var data = img.data;
+    for (var x = sx; x<ex; x++)
+        for (var y=sy; y<ey; y++) {
+            if (data[(y*w+x)*4]  < 20)
+                cnt++;
+        }
+
+    console.log("x:", sx, "-", ex, "  y:", sy, "-", ey, cnt);
+    return trunc ? (cnt >= psize*2) : (cnt > psize*psize/2.5);
+}
+
+function scanRightBorder(data) {
+    for (var x = 199; x >= 0; x--)
+        for (var y = 0; y<130; y++) {
+            if (data[(y*200+x)<<2] === 0)
+                return x;
+        }
+    return -1;
+}
+
+function scanLeftBorder(data) {
+    for (var x=0; x< 200; x++)
+        for (var y=0; y<130; y++) {
+            if (data[(y*200+x)<<2] === 0)
+                return x;
+        }
+    return -1;
+}
+
+function scanTopBorder(data) {
+    for (var y = 0; y<130; y++)
+        for (var x=0; x<200; x++) {
+            if (data[(y*200+x)<<2] === 0)
+                return y;
+        }
+    return -1;
+}
+
+function scanBottomBorder(data) {
+    for (var y=129; y>=0; y--)
+        for (var x=0; x<200; x++) {
+            if (data[(y*200+x)<<2] === 0)
+                return y;
+        }
+     return -1;
+}
+/*
+@font-face {
+  font-family: "Kimberley";
+  src: url(http://www.princexml.com/fonts/larabie/kimberle.ttf) format("truetype");
+}
+
+font-family: "Kimberley", sans-serif;
+*/
+window.onload = fontOpenGui(); //loadEditor();
 </script>
-<head>
-</head>
-<body>
-<div id=pageDiv>
-   <div id=menu>menu</div>
-   <div id=main>
-     <div id=editorGroup>
-       <div id='editor'></div>
-       <div align=center>LCD preview:</div>
-       <div style="position:relative">
-       <div id='lcd'></div>
-       </div>
-       <textarea id=typingArea></textarea>
-     </div>
-   <div id= spacer></div>
-   <div id= glyphs></div>
- </div>
-</div>
-</body>
+</html>
