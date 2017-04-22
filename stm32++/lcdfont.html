@@ -9,16 +9,53 @@
     display: flex;
     flex-flow: row
 }
-#editor {
-    flex: 0, 0, auto;
+#menu {
+    display: flex;
+    flex-flow: row;
+    border-bottom: 1px solid #eeeeee;
+    flex: 0 0 40px;
 }
-#glyphContainer {
-    flex: 0 0 auto;
-    overflow: auto;
+#pageDiv {
+    display: flex;
+    flex-flow: column;
     height: 100%;
 }
-#spacer {
+#editorGroup {
+    flex: 0 0 auto;
+    display: flex;
+    flex-flow: column
+}
+#editor {
+   flex: 0 0 auto;
+   border: 1px solid #eeeeee
+}
+#txtPreview, #typingArea {
+    flex: 0 0 auto;
+    border: 1px solid #eeeeee
+}
+#lcd {
+ height: 128px;
+ width:256px;
+ background: linear-gradient(to bottom, #f1f7de 0%,#cfd9b0 100%);
+ overflow: hidden;
+}
+
+#glyphs {
     flex: 1 1 auto;
+    display: flex;
+    flex-flow: row;
+    flex-wrap: wrap;
+    align-self: stretch;
+    overflow: auto;
+    border-left: 1px solid #eeeeee;
+}
+#spacer {
+    flex: 0 0 10px;
+}
+.glyph {
+    flex: 0 0 auto;
+    border-right: 1px solid #eeeeee;
+    border-bottom: 1px solid #eeeeee;
 }
 </style>
 
@@ -71,38 +108,40 @@ GlyphModel.prototype.removeListener = function(obj) {
 }
 var gDragged = null;
 
-function GlyphView(model, w, h, active, border)
+function GlyphView(model, psize, opts)
 {
     var self = this;
     self.model = model;
-    var cw = (w / model.width)|0;
-    var ch = (h / model.height)|0;
+    self.fg = opts.fg || kColorFg;
+    self.bg = opts.bg || kColorBg;
     var view = self.widget = document.createElement('table');
     view.style.borderSpacing = 0;
-    view.style.border = "1px solid #eeeeee";
     var rows = model.rows;
     var rowCnt = rows.length;
     var colCnt = rows[0].length;
     for (var y = 0; y < rowCnt; y++) {
         var row = view.insertRow(-1);
-        row.style.height=ch;
+        row.style.height=psize;
         var rowData = model.rows[y];
         for (var x = 0; x < colCnt; x++) {
             var cell = row.insertCell(-1);
             //cell.appendChild(document.createTextNode());
             var cellData = rowData[x];
             var style = cell.style;
-            style.width=cw;
-            style.backgroundColor = cellData ? kColorFg : kColorBg;
+            style.width=psize;
+            style.backgroundColor = cellData ? self.fg : self.bg;
             style.padding = 0;
-            if (border) {
+            var border = opts.border;
+            if (border === true) {
                 style.border = '1px solid #eeeeee';
+            } else if (border) {
+                style.border = border;
             } else {
                 style.border = '0px';
             }
             cell.x = x;
             cell.y = y;
-            if (active) {
+            if (opts.active) {
                 cell.onclick = function(event) {
                     var c = event.target;
                     self.model.flip(c.x,c.y);
@@ -115,7 +154,7 @@ function GlyphView(model, w, h, active, border)
                 cell.ondragover = function(event) {
                     if (!gDragged)
                         return;
-                    var val = (gDragged.style.backgroundColor === kColorBg) ? 0 : 1;
+                    var val = (gDragged.style.backgroundColor === self.bg) ? 0 : 1;
                     var target = event.target;
                     self.model.set(target.x, target.y, val);
                 }
@@ -127,7 +166,7 @@ function GlyphView(model, w, h, active, border)
 
 GlyphView.prototype.updatePixel = function(x,y,val) {
     var row = this.widget.rows[y];
-    row.cells[x].style.backgroundColor = val ? kColorFg : kColorBg;
+    row.cells[x].style.backgroundColor = val ? this.fg : this.bg;
 }
 
 GlyphView.prototype.changeModel = function(model) {
@@ -147,44 +186,66 @@ GlyphView.prototype.changeModel = function(model) {
     }
     model.addListener(this);
 }
+
+var glyphs = [];
+var lcdLetters = [];
+
 var gEditor = null;
+var glyphCont = null;
 window.onload = function() {
-    var glyphCount = 100;
-    var glyphCols = ((window.innerWidth-400)/64)|0;
-    var glyphTableHeight = glyphCount/glyphCols;
-    var glyphs = document.getElementById('glyphs');
-    var list = [];
-    for (var i=0; i<glyphTableHeight; i++) {
-        glyphs.insertRow();
-    }
-    for (var col = 0; col < glyphCols; col++) {
-        for (var i=0; i<glyphTableHeight; i++) {
-            var model = new GlyphModel(8,8);
-            var view = new GlyphView(model, 64,64, false);
-            view.widget.model = model; //make the model accessible from the onclick handler
-            list.push(view);
-            var row = glyphs.rows[i];
-            var cell = row.insertCell();
-            cell.appendChild(view.widget);
-            view.widget.onclick = function(event) {
-                gEditor.changeModel(event.currentTarget.model);
-            }
+    glyphCont = document.getElementById('glyphs');
+    var glyphCount = 200;
+    for (var i = 0; i < glyphCount; i++) {
+        var model = new GlyphModel(8,8);
+        var view = new GlyphView(model, 8, {active: false, bg: 'rgba(255,255,255,0)'});
+        var widget = view.widget;
+        widget.model = model; //make the model accessible from the onclick handler
+        widget.className = 'glyph';
+        glyphs.push(model);
+        glyphCont.appendChild(view.widget);
+        view.widget.onclick = function(event) {
+        gEditor.changeModel(event.currentTarget.model);
         }
     }
-    gEditor = new GlyphView(list[0].model, 300, 300, true);
+    gEditor = new GlyphView(glyphs[0], 32, {active: true});
     document.getElementById('editor').appendChild(gEditor.widget);
-
+    var txtInput = document.getElementById('typingArea');
+    txtInput.onkeypress = function(event) {
+        var idx = event.keyCode - 32;
+        if (idx < 0 || idx >= glyphs.length)
+            return;
+        var model = glyphs[0]; //[idx];
+        var letter = new GlyphView(model, 2, {active: false, bg: 'rgba(255,255,255,0)'});
+        var widget = letter.widget;
+        widget.style.display = "inline-block";
+        lcd.appendChild(letter.widget);
+   }
+   txtInput.onkeydown = function(event) {
+       if (event.keyCode === 8) { //backspace
+           var child = lcd.lastChild;
+           if (child)
+               lcd.removeChild(child);
+           return;
+       }
+   }
 }
 </script>
 <head>
 </head>
 <body>
-<div id=main>
-   <div id='editor' class=glyph></div>
-   <div id=spacer></div>
-   <div id=glyphContainer>
-       <table id='glyphs'>
-       </table>
-   </div>
+<div id=pageDiv>
+   <div id=menu>menu</div>
+   <div id=main>
+     <div id=editorGroup>
+       <div id='editor'></div>
+       <div align=center>LCD preview:</div>
+       <div style="position:relative">
+       <div id='lcd'></div>
+       </div>
+       <textarea id=typingArea></textarea>
+     </div>
+   <div id= spacer></div>
+   <div id= glyphs></div>
+ </div>
 </div>
 </body>
