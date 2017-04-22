@@ -399,7 +399,7 @@ function captureGlyph(ctx, font, ch, opts)
     ctx.fillRect(0, 0, 200, 130);
     ctx.fillStyle = 'black';
     ctx.font = opts.fontPt+"pt "+font;
-    ctx.fillText('$', 1, fontPt);
+    ctx.fillText(ch, 1, fontPt);
     var data = ctx.getImageData(0,0,200,130).data;
     //scan right vertical border
     var l = scanLeftBorder(data);
