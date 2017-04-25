@@ -116,7 +116,8 @@
 <script language=javascript>
 const kColorFg = "black";
 const kColorBg = "white";
-var blackThresh = 80;
+var blackThresh = 190;
+var borderBlackThresh = 210;
 function GlyphModel(w, h)
 {
     this.width = w;
@@ -160,6 +161,19 @@ GlyphModel.prototype.removeListener = function(obj) {
         return false;
     this.listeners.splice(idx, 1);
     return true;
+}
+GlyphModel.prototype.loadFromImgData = function(data) {
+    var w = data.width;
+    var h = data.height;
+    if (w != this.width || h != this.height)
+        throw new Error("Canvas has dimmentions different than these of the model");
+    data = data.data;
+    for (var r = 0; r<h; r++) {
+        var row = this.rows[r];
+        for (var x = 0; x<w; x++) {
+            row[x] = data[(r*w+x)*4] < blackThresh;
+        }
+    }
 }
 var gDragged = null;
 
@@ -348,12 +362,19 @@ function fontSelectGui() {
    while (cont.firstChild)
        cont.removeChild(cont.firstChild);
    cont.innerHTML =
-   "<table width=100%>\
+   "<table width=100% style='table-layout:fixed'>\
    <tr>\
        <td id=localFont width=50% class=borderBottomRight></td>\
        <td id=remoteFont width=50% class=borderBottomRight></td></tr>\
-   <tr><td colspan=2 id=images style='display: flex; flex-flow: row' align=center><canvas id=capture width=200 height=200\
-       style='width:200; height: 200; align-senf: center' />\
+   <tr><td colspan=2>\
+        <table width=100%>\
+         <tr>\
+          <td><canvas id=capture style='border: 1px solid #0000ff;\
+           width:200; height: 200; align-senf: center' /></td>\
+           <td id=glyph></td>\
+          <td width=33% style='word-wrap:break-word' id=chars></td>\
+         </tr>\
+        </table>\
    </td></tr>"
    var table = document.createElement("table");
    table.className = 'fontSelect';
@@ -380,86 +401,115 @@ function loadRemoteFont() {
     remoteFontUrl = prompt("Enter font URL", remoteFontUrl);
 }
 function captureFont(font) {
-    var images = document.getElementById('images');
+    var glyph = document.getElementById('glyph');
     var view = null;
-    var ctx = document.getElementById('capture').getContext("2d");
+    var canvas = document.getElementById('capture');
     ch=34;
-
+    var chars = document.getElementById("chars");
+    chars.style.fontFamily = font;
+    chars.textContent = '';
     function capture() {
-        var model = captureGlyph(ctx, font, String.fromCharCode(ch++));
+        var model = captureGlyph(font, String.fromCharCode(ch), canvas);
         if (view) {
-            images.removeChild(images.lastChild);
+            glyph.removeChild(glyph.lastChild);
         }
         view = new GlyphView(model, 8 , {
             active:false,
-            border: '1px solid #eeeeee',
-//            palette: ['#ffffff', 'red', 'orange', 'yellow', 'green', 'lightgreen',
-//            'blue', 'lightblue']
-
-         });
-        images.appendChild(view.widget);
+            border: '1px solid #eeeeee'
+        });
+        glyph.appendChild(view.widget);
+        chars.textContent=chars.textContent+String.fromCharCode(ch);
+        if (chars.textContent.length % 20 == 0)
+            chars.textContent+=' ';
+        ch++;
     };
     capture();
     setInterval(capture, 2000);
 }
 
-function captureGlyph(ctx, font, ch)
+function captureGlyph(font, ch, canvas)
 {
-    var fontPt = 140;
+    if (!canvas)
+        canvas = document.createElement("canvas");
+    canvas.width = 200;
+    canvas.height = 200;
+    var ctx = canvas.getContext("2d");
     ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, 200, 200);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = 'black';
-    ctx.font = fontPt+"px "+font;
-//    ctx.filter = 'blur(4px)';
-    ctx.fillText('G', 1, fontPt);
-    var data = ctx.getImageData(0,0,200,200).data;
+    var reqsize = Math.round(fontHeight*1.6)
+    ctx.font = reqsize +"px "+font;
+    var drawnHeight = parseInt(ctx.font.match(/(\d+)[^\d]+/)[1]);
+    assert(drawnHeight);
+    var baseline = drawnHeight+1; //the bottom line of the font
+    ctx.fillText(ch, 2, drawnHeight);
+    var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
     //scan right vertical border
     var l = scanLeftBorder(data);
-    var t = scanTopBorder(data);
     var r = scanRightBorder(data);
     var b = scanBottomBorder(data);
-    if (b < fontPt)
-        b = fontPt;
-    var width = r-l+1;
-    var height = b-t+1;
-    var psize = ((height+fontHeight-1)/fontHeight)|0;
-    var modelW = ((width+psize-2)/psize)|0;
-    data = ctx.getImageData(l,t, width, height);
-    ctx.strokeStyle = '#ff0000';
-    ctx.lineWidth = 1;
-
-    for (var x = 0; x <= modelW; x++) {
-        ctx.beginPath();
-        ctx.moveTo(l+x*psize, t);
-        ctx.lineTo(l+x*psize, b);
-        ctx.stroke();
+    var t = scanTopBorder(data);
+    var actualWidth = r-l+1;
+    var actualHeight = b-t+1;
+    if (actualHeight < fontHeight) {
+         if (t >= drawnHeight/2) { //shape is at bottom
+             t = b-drawnHeight+1;
+             if (t < 0)
+                 t = 0;
+             actualHeight = drawnHeight;
+             console.warn("drawn shape is smaller than fontHeight, shape is at bottom half,\
+                           setting capture area 0->fontHeight");
+         } else {
+             actualHeight = drawnHeight;
+             console.warn("drawn shape is smaller than fontHeight, shape is at top half,\
+                           setting capture area shapeTop->shapeTop+fontHeight");
+         }
     }
-    for (var y=0; y<=width; y+=psize) {
-        ctx.beginPath();
-        ctx.moveTo(l, t+y);
-        ctx.lineTo(r, t+y);
-        ctx.stroke();
-    }
-    ctx.strokeStyle = '#0000ff';
-    ctx.beginPath();
-    ctx.moveTo(l, fontPt);
-    ctx.lineTo(r, fontPt);
-    ctx.stroke();
-
-    return estimateGlyph(modelW, data, psize);
-}
-
-function estimateGlyph(modelW, data, psize) {
-    var model = new GlyphModel(modelW, fontHeight);
-    for (var y=0; y<fontHeight; y++) {
-         var row = model.rows[y];
-         for (var x=0; x<modelW; x++) {
-             row[x] = estimatePixel(data, x, y, psize);
+    var ratio = actualHeight / fontHeight;
+    data = ctx.getImageData(l,t,actualWidth,actualHeight);
+    var width = data.width;
+    var height = data.height;
+    if (ratio > 1.00) {
+        ctx.putImageData(data, 0, 0);
+        while(ratio > 1.0) {
+             console.log("iter("+ch+"): height=", height, " ratio=", ratio, "req fontsize:", reqsize, "actual:", drawnHeight);
+            //select target height that is at most 2 times smaller
+            var newHeight = (ratio >= 2.0)
+                ? ((height+1)/2)|0 //round upward, so that the ratio is always <=2
+                : fontHeight;
+            var iterRatio = height / newHeight;
+            assert(iterRatio <= 2.0);
+            var newWidth = Math.round(width / iterRatio);
+            ctx.drawImage(canvas, 0, 0, width, height, 0, 0, newWidth, newHeight);
+            width = newWidth;
+            height = newHeight;
+            ratio = height / fontHeight;
         }
+        assert(ratio == 1.0);
+        data = ctx.getImageData(0,0,width,height);
     }
+    else // not (ratio > 1.0)
+    {
+        assert(ratio == 1.0);
+        console.log("ratio is as expectedm height=", height);
+    }
+    var canv = document.createElement("canvas");
+    canv.width = data.width;
+    canv.height = data.height;
+    canv.getContext("2d").putImageData(data, 0, 0);
+
+    ctx.drawImage(canv, 0, 0, data.width, data.height, 0, 0, canvas.width, canvas.height);
+    canvas.style.width=data.width*10;
+    canvas.style.height=data.height*10;
+
+    var model = new GlyphModel(width, fontHeight);
+    model.loadFromImgData(data);
     return model;
 }
-
+function assert(cond) {
+    if (!cond)
+        throw new Error("assertion failed");
+}
 function putPixel(ctx, x, y, r,g,b,a) {
     var pixel = ctx.createImageData(1,1);
     var d = pixel.data;
@@ -470,82 +520,53 @@ function putPixel(ctx, x, y, r,g,b,a) {
     ctx.putImageData(pixel, x, y);
 }
 
-function estimatePixel(img, sx, sy, psize) {
-    var w = img.width;
-    var h = img.height;
-    sx *= psize;
-    sy *= psize;
-    var ex = sx+psize;
-    var trunc;
-    if (ex > w) {
-        trunc = (ex-w)/psize; //ratio of truncation, needed for pixel fill estimation
-        ex = w;
-    } else {
-        trunc = 0;
-    }
-    var ey = sy+psize;
-    if (ey > h) {
-        if (trunc)
-           trunc = trunc*(ey-h)/psize;
-        else
-           trunc = (ey-h)/psize;
-        ey = h;
-    }
-    var cnt = 0;
-    var data = img.data;
-    for (var x = sx; x<ex; x++)
-        for (var y=sy; y<ey; y++) {
-            if (data[(y*w+x)*4]  < blackThresh)
-                cnt++;
-        }
-
-    console.log("x:", sx, "-", ex, "  y:", sy, "-", ey, "w=", w, "h=",h, "cnt=",cnt);
-    return trunc ? (cnt >= trunc*psize*psize/3) : (cnt >= psize*psize/2.6);
-}
-
 function scanRightBorder(data) {
-    for (var x = 199; x >= 0; x--)
-        for (var y = 0; y<200; y++) {
-            if (data[(y*200+x)<<2] < blackThresh)
+    var w = data.width;
+    var h = data.height;
+    data = data.data;
+    for (var x = w-1; x >= 0; x--)
+        for (var y = 0; y<h; y++) {
+            if (data[(y*w+x)<<2] < borderBlackThresh)
                 return x;
         }
     return -1;
 }
 
 function scanLeftBorder(data) {
-    for (var x=0; x< 200; x++)
-        for (var y=0; y<200; y++) {
-            if (data[(y*200+x)<<2] < blackThresh)
+    var w = data.width;
+    var h = data.height;
+    data = data.data;
+    for (var x=0; x<w; x++)
+        for (var y=0; y<h; y++) {
+            if (data[(y*w+x)<<2] < borderBlackThresh)
                 return x;
         }
     return -1;
 }
 
 function scanTopBorder(data) {
-    for (var y = 0; y<200; y++)
-        for (var x=0; x<200; x++) {
-            if (data[(y*200+x)<<2] < blackThresh)
+    var w = data.width;
+    var h = data.height;
+    data = data.data;
+    for (var y = 0; y<h; y++)
+        for (var x=0; x<w; x++) {
+            if (data[(y*w+x)<<2] < borderBlackThresh)
                 return y;
         }
     return -1;
 }
 
 function scanBottomBorder(data) {
-    for (var y=199; y>=0; y--)
-        for (var x=0; x<200; x++) {
-            if (data[(y*200+x)<<2] < blackThresh)
+    var w = data.width;
+    var h = data.height;
+    data = data.data;
+    for (var y=h-1; y>=0; y--) {
+        for (var x=0; x<w; x++) {
+            if (data[(y*w+x)<<2] < borderBlackThresh)
                 return y;
         }
-     return -1;
-}
-function addArrays() {
-    var result = arguments[0];
-    var size = result.length;
-    result.fill(0);
-    var argc = arguments.length;
-    for (var i=0; i<size; i++)
-        for (var a = 1; a<argc; a++)
-           result[i]+=arguments[a][i];
+    }
+    return -1;
 }
 
 /*
