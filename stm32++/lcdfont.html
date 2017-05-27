@@ -114,6 +114,10 @@
     z-index:1000;
     border: 1px solid black;
     padding: 2px;
+    opacity: 1;
+    background-color: white;
+    cursor: hand;
+    border-radius: 6px;
 }
 .ctxMenu tr:hover {
     background-color: lightblue
@@ -127,11 +131,21 @@
 const kColorFg = "black";
 const kColorBg = "white";
 var blackThresh = localStorage['blackThresh'] || 170;
+var gMonospaceFont = false;
 function GlyphModel(w, h, ch)
 {
     this.width = w;
     this.height = h;
     this.char = ch;
+    this.allocate();
+    this.listeners = new Array();
+}
+var gmProto = GlyphModel.prototype;
+
+gmProto.allocate = function()
+{
+    var h = this.height;
+    var w = this.width;
     this.rows = new Array(h);
     for (var r=0; r<h; r++) {
         var row = this.rows[r] = new Array(w);
@@ -139,30 +153,32 @@ function GlyphModel(w, h, ch)
            row[c] = false;
         }
     }
-    this.listeners = new Array();
 }
 
-GlyphModel.prototype.flip = function(x, y) {
+gmProto.flip = function(x, y) {
     var row = this.rows[y];
-    var val = row[x] = !row[x];
+    var curr = row[x];
+    var val = row[x] = !curr;
     var count = this.listeners.length;
     for (var i=0; i<count; i++) {
-        this.listeners[i].updatePixel(x, y, val);
+        this.listeners[i].onPixelChanged(x, y, val);
     }
+    return curr;
 }
-GlyphModel.prototype.set = function(x,y,val)
+gmProto.set = function(x,y,val)
 {
     var row = this.rows[y];
     var oldVal = row[x];
     if (val === oldVal)
-        return;
+        return undefined;
     row[x] = val;
     var count = this.listeners.length;
     for (var i=0; i<count; i++) {
-        this.listeners[i].updatePixel(x, y, val);
+        this.listeners[i].onPixelChanged(x, y, val);
     }
+    return oldVal;
 }
-GlyphModel.prototype.deleteColumn = function(x)
+gmProto.deleteColumn = function(x)
 {
     var h = this.height;
     for (var r = 0; r < h; r++) {
@@ -172,14 +188,14 @@ GlyphModel.prototype.deleteColumn = function(x)
     this.notifyDimensionsChanged();
 }
 
-GlyphModel.prototype.notifyDimensionsChanged = function()
+gmProto.notifyDimensionsChanged = function()
 {
     var count = this.listeners.length;
     for (var i=0; i<count; i++) {
-        this.listeners[i].modelDimChanged();
+        this.listeners[i].onDimensionsChanged();
     }
 }
-GlyphModel.prototype.insertColumn = function(x)
+gmProto.insertColumn = function(x)
 {
     var h = this.height;
     if (x === this.width) {
@@ -195,18 +211,18 @@ GlyphModel.prototype.insertColumn = function(x)
     this.notifyDimensionsChanged();
 }
 
-GlyphModel.prototype.addListener = function(obj)
+gmProto.addListener = function(obj)
 {
     this.listeners.push(obj);
 }
-GlyphModel.prototype.removeListener = function(obj) {
+gmProto.removeListener = function(obj) {
     var idx = this.listeners.indexOf(obj);
     if (idx < 0)
         return false;
     this.listeners.splice(idx, 1);
     return true;
 }
-GlyphModel.prototype.loadFromImgData = function(data) {
+gmProto.loadFromImgData = function(data) {
     var w = data.width;
     var h = data.height;
     if (w != this.width || h != this.height)
@@ -218,6 +234,29 @@ GlyphModel.prototype.loadFromImgData = function(data) {
             row[x] = data[(r*w+x)*4] < blackThresh;
         }
     }
+}
+gmProto.clear = function()
+{
+   this.allocate();
+   var count = this.listeners.length;
+   for (var i=0; i<count; i++) {
+       this.listeners[i].onModelUpdated();
+   }
+}
+gmProto.clone = function() {
+    var result = new GlyphModel(this.width, this.height, this.char);
+    var w = this.width;
+    var h = this.height;
+    var drows = result.rows;
+    var rows = this.rows;
+    for (var y = 0; y<h; y++) {
+        var drow = drows[y];
+        var row = rows[y];
+        for (var x = 0; x<w; x++) {
+            drow[x] = row[x];
+        }
+    }
+    return result;
 }
 var gDragged = null;
 var gCtxMenu = null;
@@ -233,9 +272,12 @@ function GlyphView(model, psize, opts)
     model.addListener(this);
     if (!opts.active) {
         this.updateToolTip();
+    } else {
+        this.undoBuf = [];
     }
 }
-GlyphView.prototype.createGui = function() {
+var gvProto = GlyphView.prototype;
+gvProto.createGui = function() {
     var self = this;
     var view = self.widget;
     self.setPixelSpacing(this.opts.pixSpacing);
@@ -271,7 +313,8 @@ GlyphView.prototype.createGui = function() {
             if (this.opts.active) {
                 cell.onclick = function(event) {
                     var c = event.target;
-                    self.model.flip(c.x,c.y);
+                    var old = self.model.flip(c.x, c.y);
+                    self.undoBuf.push([c.x, c.y, old]);
                 }
                 cell.ondragstart = function(event) {
                     // store a ref. on the dragged elem
@@ -283,7 +326,10 @@ GlyphView.prototype.createGui = function() {
                         return;
                     var val = (gDragged.style.backgroundColor === self.bg) ? 0 : 1;
                     var target = event.target;
-                    self.model.set(target.x, target.y, val);
+                    var old = self.model.set(target.x, target.y, val);
+                    if (old !== undefined) {
+                        self.undoBuf.push([target.x, target.y, old]);
+                    }
                 }
 
                 cell.oncontextmenu = function(event) {
@@ -293,7 +339,7 @@ GlyphView.prototype.createGui = function() {
         }
     }
 }
-GlyphView.prototype.ctxMenu = function(event) {
+gvProto.ctxMenu = function(event) {
     if (gCtxMenu) {
         return;
     }
@@ -304,21 +350,35 @@ GlyphView.prototype.ctxMenu = function(event) {
     gCtxMenu.className = 'ctxMenu';
     gCtxMenu.style.top = event.pageY + "px";
     gCtxMenu.style.left = event.pageX + "px";
-    m.innerHTML = '<table>\
-        <tr><td id=ctxDelCol>Delete column</td></tr>\
-        <tr><td id=ctxInsertColLeft>Insert Column on Left</td></tr>\
-        <tr><td id=ctxInsertColRight>Insert Column on Right</td></tr>\
-    </table>';
-    m.querySelector("#ctxDelCol").onclick = function(event) {
-        self.model.deleteColumn(cell.x);
-    };
-    m.querySelector("#ctxInsertColLeft").onclick = function(event) {
-        self.model.insertColumn(cell.x);
-    };
-    m.querySelector("#ctxInsertColRight").onclick = function(event) {
-        self.model.insertColumn(cell.x+1);
+    var html = '<table>';
+    if (!gMonospaceFont) {
+        html+=
+           '<tr><td id=ctxDelCol>Delete column</td></tr>\
+            <tr><td id=ctxInsertColLeft>Insert Column on Left</td></tr>\
+            <tr><td id=ctxInsertColRight>Insert Column on Right</td></tr>';
+    }
+    html+=
+        '<tr><td id=ctxClearGlyph>Clear glyph</td></tr>\
+        </table>';
+    m.innerHTML = html;
+
+    m.querySelector("#ctxClearGlyph").onclick = function(event) {
+        self.clear();
     };
 
+    if (!gMonospaceFont) {
+        m.querySelector("#ctxDelCol").onclick = function(event) {
+            if (self.model.width <= 1)
+                return;
+            self.deleteColumn(cell.x);
+        };
+        m.querySelector("#ctxInsertColLeft").onclick = function(event) {
+            self.insertColumn(cell.x);
+        };
+        m.querySelector("#ctxInsertColRight").onclick = function(event) {
+            self.insertColumn(cell.x+1);
+        };
+    }
     document.body.appendChild(gCtxMenu);
     var clickHandler = function(event) {
         document.removeEventListener("click", clickHandler);
@@ -331,7 +391,7 @@ GlyphView.prototype.ctxMenu = function(event) {
     document.addEventListener("click", clickHandler);
 }
 
-GlyphView.prototype.updateToolTip = function()
+gvProto.updateToolTip = function()
 {
     var model = this.model;
     this.widget.setAttribute('title',
@@ -339,24 +399,30 @@ GlyphView.prototype.updateToolTip = function()
         '\nwidth: '+model.width);
 }
 
-GlyphView.prototype.updatePixel = function(x,y,val) {
+gvProto.onPixelChanged = function(x,y,val) {
     var row = this.widget.rows[y];
     row.cells[x].style.backgroundColor = val ? this.fg : this.bg;
 }
-GlyphView.prototype.modelDimChanged = function() {
+gvProto.onDimensionsChanged = function() {
     this.widget.innerHTML = '';
     this.createGui();
     this.updateToolTip();
 }
-
-GlyphView.prototype.changeModel = function(model) {
+gvProto.onModelUpdated = function() {
+    this.widget.innerHTML = '';
+    this.createGui();
+}
+gvProto.changeModel = function(model, dontClearUndo) {
     this.model.removeListener(this);
     this.model = model;
+    if (!dontClearUndo) {
+        this.undoBuf = [];
+    }
     model.addListener(this);
     var h = this.widget.rows.length;
     var w = this.widget.rows[0].cells.length;
     if (h !== model.height || w !== model.width) {
-        modelDimChanged();
+        this.onDimensionsChanged();
         return;
     }
 
@@ -369,11 +435,42 @@ GlyphView.prototype.changeModel = function(model) {
     }
 }
 
-GlyphView.prototype.setPixelSpacing = function(n) {
+gvProto.setPixelSpacing = function(n) {
     if (n === undefined) {
         n = 0;
     }
     this.widget.style.borderSpacing = n+'px';
+}
+
+gvProto.insertColumn = function(x) {
+    var oldModel = this.model.clone();
+    this.model.insertColumn(x);
+    this.undoBuf.push(oldModel);
+}
+gvProto.deleteColumn = function(x) {
+    var oldModel = this.model.clone();
+    this.model.deleteColumn(x);
+    this.undoBuf.push(oldModel);
+}
+gvProto.clear = function() {
+   var oldModel = this.model.clone();
+   this.model.clear();
+   this.undoBuf.push(oldModel);
+}
+gvProto.undo = function() {
+    if (!this.undoBuf || this.undoBuf.length < 1) {
+        console.log("No more undo history");
+        return false;
+    }
+    var op = this.undoBuf.pop();
+    if (op.length === undefined) {  //bulk change = op is a model
+       this.changeModel(op, true);
+    } else if (op.length === 3) { //pixel change
+        this.model.set(op[0], op[1], op[2]);
+    } else {
+        throw new Error("Unknown undo operation");
+    }
+    return true;
 }
 
 var lcdLetters = [];
@@ -427,15 +524,16 @@ function loadEditor(models) {
         widget.className = 'glyph';
         glyphCont.appendChild(view.widget);
         view.widget.onclick = function(event) {
-            editorCont.removeChild(gEditor.widget);
-            gEditor = new GlyphView(event.currentTarget.model, 16, {active: true});
-            gEditor.widget.setAttribute('id', 'glyphEditor');
-            editorCont.appendChild(gEditor.widget);
+            gEditor.changeModel(event.currentTarget.model);
         };
     }
     gEditor = new GlyphView(models[0], 16, {active: true});
     gEditor.widget.setAttribute('id', 'glyphEditor');
-
+    document.addEventListener("keydown", function(event) {
+        if (event.keyCode == 90 && event.ctrlKey) {
+            gEditor.undo();
+        }
+    });
     editorCont.appendChild(gEditor.widget);
     var txtInput = document.getElementById('typingArea');
     txtInput.onkeypress = function(event) {
