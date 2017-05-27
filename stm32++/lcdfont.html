@@ -109,19 +109,29 @@
    border-bottom: 1px solid #eeeeee;
    border-right: 1px solid #eeeeee;
 }
+.ctxMenu {
+    position: absolute;
+    z-index:1000;
+    border: 1px solid black;
+    padding: 2px;
+}
+.ctxMenu tr:hover {
+    background-color: lightblue
+}
 </style>
 </head>
 <body id=page>
 </body>
+
 <script language=javascript>
 const kColorFg = "black";
 const kColorBg = "white";
-var blackThresh = 190;
-var borderBlackThresh = 210;
-function GlyphModel(w, h)
+var blackThresh = localStorage['blackThresh'] || 170;
+function GlyphModel(w, h, ch)
 {
     this.width = w;
     this.height = h;
+    this.char = ch;
     this.rows = new Array(h);
     for (var r=0; r<h; r++) {
         var row = this.rows[r] = new Array(w);
@@ -140,7 +150,8 @@ GlyphModel.prototype.flip = function(x, y) {
         this.listeners[i].updatePixel(x, y, val);
     }
 }
-GlyphModel.prototype.set = function(x,y,val) {
+GlyphModel.prototype.set = function(x,y,val)
+{
     var row = this.rows[y];
     var oldVal = row[x];
     if (val === oldVal)
@@ -151,8 +162,41 @@ GlyphModel.prototype.set = function(x,y,val) {
         this.listeners[i].updatePixel(x, y, val);
     }
 }
+GlyphModel.prototype.deleteColumn = function(x)
+{
+    var h = this.height;
+    for (var r = 0; r < h; r++) {
+        this.rows[r].splice(x, 1);
+    }
+    this.width--;
+    this.notifyDimensionsChanged();
+}
 
-GlyphModel.prototype.addListener = function(obj) {
+GlyphModel.prototype.notifyDimensionsChanged = function()
+{
+    var count = this.listeners.length;
+    for (var i=0; i<count; i++) {
+        this.listeners[i].modelDimChanged();
+    }
+}
+GlyphModel.prototype.insertColumn = function(x)
+{
+    var h = this.height;
+    if (x === this.width) {
+        for (var r = 0; r < h; r++) {
+            this.rows[r].push(false);
+        }
+    } else {
+        for (var r = 0; r < h; r++) {
+            this.rows[r].splice(x, 0, false);
+        }
+    }
+    this.width++;
+    this.notifyDimensionsChanged();
+}
+
+GlyphModel.prototype.addListener = function(obj)
+{
     this.listeners.push(obj);
 }
 GlyphModel.prototype.removeListener = function(obj) {
@@ -166,7 +210,7 @@ GlyphModel.prototype.loadFromImgData = function(data) {
     var w = data.width;
     var h = data.height;
     if (w != this.width || h != this.height)
-        throw new Error("Canvas has dimmentions different than these of the model");
+        throw new Error("Canvas has dimensions different than these of the model");
     data = data.data;
     for (var r = 0; r<h; r++) {
         var row = this.rows[r];
@@ -176,35 +220,45 @@ GlyphModel.prototype.loadFromImgData = function(data) {
     }
 }
 var gDragged = null;
-
+var gCtxMenu = null;
 function GlyphView(model, psize, opts)
 {
+    this.model = model;
+    this.psize = psize;
+    this.opts = opts;
+    this.fg = opts.fg || kColorFg;
+    this.bg = opts.bg || kColorBg;
+    this.widget = document.createElement('table');
+    this.createGui();
+    model.addListener(this);
+    if (!opts.active) {
+        this.updateToolTip();
+    }
+}
+GlyphView.prototype.createGui = function() {
     var self = this;
-    self.model = model;
-    self.fg = opts.fg || kColorFg;
-    self.bg = opts.bg || kColorBg;
-    var view = self.widget = document.createElement('table');
-    view.style.borderSpacing = 0;
-    var rows = model.rows;
+    var view = self.widget;
+    self.setPixelSpacing(this.opts.pixSpacing);
+    var rows = self.model.rows;
     var rowCnt = rows.length;
     var colCnt = rows[0].length;
-    var palette = opts.palette ? opts.palette : null;
+    var palette = this.opts.palette ? this.opts.palette : null;
     for (var y = 0; y < rowCnt; y++) {
         var row = view.insertRow(-1);
-        row.style.height=psize;
-        var rowData = model.rows[y];
+        row.style.height = self.psize;
+        var rowData = rows[y];
         for (var x = 0; x < colCnt; x++) {
             var cell = row.insertCell(-1);
             var cellData = rowData[x];
             var style = cell.style;
-            style.width=psize;
+            style.width = self.psize;
             if (palette) {
                 style.backgroundColor = palette[cellData];
             } else {
                 style.backgroundColor = cellData ? self.fg : self.bg;
             }
             style.padding = 0;
-            var border = opts.border;
+            var border = this.opts.border;
             if (border === true) {
                 style.border = '1px solid #eeeeee';
             } else if (border) {
@@ -214,7 +268,7 @@ function GlyphView(model, psize, opts)
             }
             cell.x = x;
             cell.y = y;
-            if (opts.active) {
+            if (this.opts.active) {
                 cell.onclick = function(event) {
                     var c = event.target;
                     self.model.flip(c.x,c.y);
@@ -231,25 +285,81 @@ function GlyphView(model, psize, opts)
                     var target = event.target;
                     self.model.set(target.x, target.y, val);
                 }
+
+                cell.oncontextmenu = function(event) {
+                    self.ctxMenu(event);
+                }
             }
         }
     }
-    model.addListener(self);
+}
+GlyphView.prototype.ctxMenu = function(event) {
+    if (gCtxMenu) {
+        return;
+    }
+    var self = this;
+    var cell = event.target;
+    event.preventDefault();
+    var m = gCtxMenu = document.createElement('div');
+    gCtxMenu.className = 'ctxMenu';
+    gCtxMenu.style.top = event.pageY + "px";
+    gCtxMenu.style.left = event.pageX + "px";
+    m.innerHTML = '<table>\
+        <tr><td id=ctxDelCol>Delete column</td></tr>\
+        <tr><td id=ctxInsertColLeft>Insert Column on Left</td></tr>\
+        <tr><td id=ctxInsertColRight>Insert Column on Right</td></tr>\
+    </table>';
+    m.querySelector("#ctxDelCol").onclick = function(event) {
+        self.model.deleteColumn(cell.x);
+    };
+    m.querySelector("#ctxInsertColLeft").onclick = function(event) {
+        self.model.insertColumn(cell.x);
+    };
+    m.querySelector("#ctxInsertColRight").onclick = function(event) {
+        self.model.insertColumn(cell.x+1);
+    };
+
+    document.body.appendChild(gCtxMenu);
+    var clickHandler = function(event) {
+        document.removeEventListener("click", clickHandler);
+        if (event.target.className && event.target.className === 'ctxMenu') {
+            alert("menu clicked");
+        }
+        document.body.removeChild(gCtxMenu);
+        gCtxMenu = null;
+    };
+    document.addEventListener("click", clickHandler);
+}
+
+GlyphView.prototype.updateToolTip = function()
+{
+    var model = this.model;
+    this.widget.setAttribute('title',
+        "Char: '"+this.model.char+"' (code: "+model.char.charCodeAt(0)+")"+
+        '\nwidth: '+model.width);
 }
 
 GlyphView.prototype.updatePixel = function(x,y,val) {
     var row = this.widget.rows[y];
     row.cells[x].style.backgroundColor = val ? this.fg : this.bg;
 }
+GlyphView.prototype.modelDimChanged = function() {
+    this.widget.innerHTML = '';
+    this.createGui();
+    this.updateToolTip();
+}
 
 GlyphView.prototype.changeModel = function(model) {
     this.model.removeListener(this);
     this.model = model;
+    model.addListener(this);
     var h = this.widget.rows.length;
     var w = this.widget.rows[0].cells.length;
     if (h !== model.height || w !== model.width) {
-        throw new Error("changeModel: new model has different dimensions");
+        modelDimChanged();
+        return;
     }
+
     for (var y = 0; y < h; y++) {
         var row = this.widget.rows[y];
         var rowData = model.rows[y];
@@ -257,16 +367,17 @@ GlyphView.prototype.changeModel = function(model) {
             row.cells[x].style.backgroundColor = rowData[x] ? kColorFg : kColorBg;
         }
     }
-    model.addListener(this);
 }
 
-var glyphs = [];
-var lcdLetters = [];
-var fontWidth = 8;
-var fontHeight = 10;
+GlyphView.prototype.setPixelSpacing = function(n) {
+    if (n === undefined) {
+        n = 0;
+    }
+    this.widget.style.borderSpacing = n+'px';
+}
 
+var lcdLetters = [];
 var gEditor = null;
-var glyphCont = null;
 var editorHtml =
 "<div id=pageDiv>\
    <div id=menu>menu</div>\
@@ -302,31 +413,37 @@ var loadGui =
     </tr>\
   </table>";
 
-function loadEditor() {
+function loadEditor(models) {
     document.getElementById('page').innerHTML = editorHtml;
     glyphCont = document.getElementById('glyphs');
-    var glyphCount = 200;
+    var glyphCount = models.length;
+    var editorCont = document.getElementById('editor');
+
     for (var i = 0; i < glyphCount; i++) {
-        var model = new GlyphModel(8,8);
+        var model = models[i];
         var view = new GlyphView(model, 8, {active: false, bg: 'rgba(255,255,255,0)'});
         var widget = view.widget;
         widget.model = model; //make the model accessible from the onclick handler
         widget.className = 'glyph';
-        glyphs.push(model);
         glyphCont.appendChild(view.widget);
         view.widget.onclick = function(event) {
-        gEditor.changeModel(event.currentTarget.model);
-        }
+            editorCont.removeChild(gEditor.widget);
+            gEditor = new GlyphView(event.currentTarget.model, 16, {active: true});
+            gEditor.widget.setAttribute('id', 'glyphEditor');
+            editorCont.appendChild(gEditor.widget);
+        };
     }
-    gEditor = new GlyphView(glyphs[0], 32, {active: true});
-    document.getElementById('editor').appendChild(gEditor.widget);
+    gEditor = new GlyphView(models[0], 16, {active: true});
+    gEditor.widget.setAttribute('id', 'glyphEditor');
+
+    editorCont.appendChild(gEditor.widget);
     var txtInput = document.getElementById('typingArea');
     txtInput.onkeypress = function(event) {
         var idx = event.charCode - 32;
         if (idx < 0 || idx >= glyphs.length)
             return;
-        var model = glyphs[0]; //[idx];
-        var letter = new GlyphView(model, 2, {active: false, bg: 'rgba(255,255,255,0)'});
+        var bitmap = models[idx];
+        var letter = new GlyphView(bitmap, 2, {active: false, bg: 'rgba(255,255,255,0)'});
         var widget = letter.widget;
         widget.style.display = "inline-block";
         lcd.appendChild(letter.widget);
@@ -400,124 +517,147 @@ var remoteFontUrl = '';
 function loadRemoteFont() {
     remoteFontUrl = prompt("Enter font URL", remoteFontUrl);
 }
-function captureFont(font) {
-    var glyph = document.getElementById('glyph');
-    var view = null;
-    var canvas = document.getElementById('capture');
-    ch=34;
-    var chars = document.getElementById("chars");
-    chars.style.fontFamily = font;
-    chars.textContent = '';
-    function capture() {
-        var model = captureGlyph(font, String.fromCharCode(ch), canvas);
-        if (view) {
-            glyph.removeChild(glyph.lastChild);
-        }
-        view = new GlyphView(model, 8 , {
-            active:false,
-            border: '1px solid #eeeeee'
-        });
-        glyph.appendChild(view.widget);
-        chars.textContent=chars.textContent+String.fromCharCode(ch);
-        if (chars.textContent.length % 20 == 0)
-            chars.textContent+=' ';
-        ch++;
-    };
-    capture();
-    setInterval(capture, 2000);
+//var canvas = document.getElementById('capture');
+//var glyph = document.getElementById('glyph');
+function captureFont(font)
+{
+    var cap = new FontCapturer(font, 14, document.getElementById('capture'));
+    var models = cap.capture();
+    loadEditor(models);
 }
 
-function captureGlyph(font, ch, canvas)
+function FontCapturer(font, height, canvas)
 {
-    if (!canvas)
-        canvas = document.createElement("canvas");
+    this.font = font;
+    this.targetFontHeight = height;
+    this.canvas = canvas;
     canvas.width = 200;
     canvas.height = 200;
-    var ctx = canvas.getContext("2d");
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = 'black';
-    var reqsize = Math.round(fontHeight*1.6)
-    ctx.font = reqsize +"px "+font;
-    var drawnHeight = parseInt(ctx.font.match(/(\d+)[^\d]+/)[1]);
-    assert(drawnHeight);
-    var baseline = drawnHeight+1; //the bottom line of the font
-    ctx.fillText(ch, 2, drawnHeight);
-    var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    //scan right vertical border
+    var ctx = this.ctx = canvas.getContext("2d");
+    ctx.font = height +"px "+font;
+    this.drawnFontSize = parseInt(ctx.font.match(/(\d+)[^\d]+/)[1]);
+    assert(this.drawnFontSize);
+}
+
+var capProto = FontCapturer.prototype;
+
+capProto.capture = function()
+{
+    this.detectFontTop();
+    this.detectFontBottom();
+    this.drawFontHeight = this.fontBottom-this.fontTop+1;
+    this.ratio = this.drawFontHeight / this.targetFontHeight;
+    if (this.ratio > 1.0) {
+        console.log("Draw font height is not the same as the target one, capturer will scale the image", this.ratio, "times");
+    }
+    var models = [];
+    for (var ch=32; ch < 256; ch++) {
+        models.push(this.captureGlyph(String.fromCharCode(ch)));
+    };
+    return models;
+}
+
+capProto.clearCanvas = function() {
+    this.ctx.fillStyle = 'white';
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.fillStyle = 'black';
+}
+
+capProto.drawGlyph = function(ch)
+{
+    this.clearCanvas();
+    var baseline = this.drawnFontSize*2; //make sure we have enought space above the baseline
+    this.ctx.fillText(ch, 2, baseline);
+    return this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+}
+
+var bottomChars = ["g", "j", "p", "q", "y"];
+var topChars = ["h", "d", "t", "l", "|", "]", "/", "^", "!", "O", "A", "8", "#", "%"];
+var medChars = ["x", "v", "w", "z"];
+
+capProto.detectFontBottom = function()
+{
+    var bottom = 0;
+    var len = bottomChars.length;
+    for (var i=0; i<len; i++) {
+        var data = this.drawGlyph(bottomChars[i]);
+        var b = scanBottomBorder(data);
+        if (b > bottom) {
+            bottom = b;
+        }
+        console.log('letter', bottomChars[i], 'bottom:', b);
+    }
+    this.fontBottom = bottom;
+}
+
+capProto.detectFontTop = function()
+{
+    var top = 0xffff;
+    var len = topChars.length;
+    for (var i=0; i<len; i++) {
+        var data = this.drawGlyph(topChars[i]);
+        var t = scanTopBorder(data);
+        if (t < top) {
+            top = t;
+        }
+    }
+    this.fontTop = top;
+}
+
+capProto.captureGlyph = function(ch)
+{
+    assert(this.fontBottom);
+    assert(this.fontTop !== undefined);
+    var data = this.drawGlyph(ch);
+    //scan width
     var l = scanLeftBorder(data);
     var r = scanRightBorder(data);
-    var b = scanBottomBorder(data);
-    var t = scanTopBorder(data);
     var actualWidth = r-l+1;
-    var actualHeight = b-t+1;
-    if (actualHeight < fontHeight) {
-         if (t >= drawnHeight/2) { //shape is at bottom
-             t = b-drawnHeight+1;
-             if (t < 0)
-                 t = 0;
-             actualHeight = drawnHeight;
-             console.warn("drawn shape is smaller than fontHeight, shape is at bottom half,\
-                           setting capture area 0->fontHeight");
-         } else {
-             actualHeight = drawnHeight;
-             console.warn("drawn shape is smaller than fontHeight, shape is at top half,\
-                           setting capture area shapeTop->shapeTop+fontHeight");
-         }
-    }
-    var ratio = actualHeight / fontHeight;
-    data = ctx.getImageData(l,t,actualWidth,actualHeight);
+    data = this.ctx.getImageData(l, this.fontTop, actualWidth, this.drawFontHeight);
     var width = data.width;
     var height = data.height;
+    assert(height === this.drawFontHeight);
+    var ratio = this.ratio;
     if (ratio > 1.00) {
-        ctx.putImageData(data, 0, 0);
+        this.ctx.putImageData(data, 0, 0);
         while(ratio > 1.0) {
-             console.log("iter("+ch+"): height=", height, " ratio=", ratio, "req fontsize:", reqsize, "actual:", drawnHeight);
+            console.log("iter("+ch+"): height=", height, " ratio=", ratio, "req fontsize:", this.targetFontHeight, "actual:", this.drawFontHeight);
             //select target height that is at most 2 times smaller
             var newHeight = (ratio >= 2.0)
                 ? ((height+1)/2)|0 //round upward, so that the ratio is always <=2
-                : fontHeight;
+                : this.targetFontHeight;
             var iterRatio = height / newHeight;
             assert(iterRatio <= 2.0);
             var newWidth = Math.round(width / iterRatio);
-            ctx.drawImage(canvas, 0, 0, width, height, 0, 0, newWidth, newHeight);
+            this.ctx.drawImage(this.canvas, 0, 0, width, height, 0, 0, newWidth, newHeight);
             width = newWidth;
             height = newHeight;
-            ratio = height / fontHeight;
+            ratio = height / this.targetFontHeight;
         }
         assert(ratio == 1.0);
-        data = ctx.getImageData(0,0,width,height);
+        data = this.ctx.getImageData(0, 0, width, height);
     }
     else // not (ratio > 1.0)
     {
         assert(ratio == 1.0);
-        console.log("ratio is as expectedm height=", height);
+        console.log("ratio is as expected, height=", height);
     }
     var canv = document.createElement("canvas");
     canv.width = data.width;
     canv.height = data.height;
     canv.getContext("2d").putImageData(data, 0, 0);
 
-    ctx.drawImage(canv, 0, 0, data.width, data.height, 0, 0, canvas.width, canvas.height);
-    canvas.style.width=data.width*10;
-    canvas.style.height=data.height*10;
+    this.ctx.drawImage(this.canvas, 0, 0, data.width, data.height, 0, 0,
+        this.canvas.width, this.canvas.height);
 
-    var model = new GlyphModel(width, fontHeight);
+    var model = new GlyphModel(data.width, data.height, ch);
     model.loadFromImgData(data);
     return model;
 }
+
 function assert(cond) {
     if (!cond)
         throw new Error("assertion failed");
-}
-function putPixel(ctx, x, y, r,g,b,a) {
-    var pixel = ctx.createImageData(1,1);
-    var d = pixel.data;
-    d[0] = r;
-    d[1] = g;
-    d[2] = b;
-    d[3] = a;
-    ctx.putImageData(pixel, x, y);
 }
 
 function scanRightBorder(data) {
@@ -526,7 +666,7 @@ function scanRightBorder(data) {
     data = data.data;
     for (var x = w-1; x >= 0; x--)
         for (var y = 0; y<h; y++) {
-            if (data[(y*w+x)<<2] < borderBlackThresh)
+            if (data[(y*w+x)<<2] < blackThresh)
                 return x;
         }
     return -1;
@@ -538,7 +678,7 @@ function scanLeftBorder(data) {
     data = data.data;
     for (var x=0; x<w; x++)
         for (var y=0; y<h; y++) {
-            if (data[(y*w+x)<<2] < borderBlackThresh)
+            if (data[(y*w+x)<<2] < blackThresh)
                 return x;
         }
     return -1;
@@ -550,7 +690,7 @@ function scanTopBorder(data) {
     data = data.data;
     for (var y = 0; y<h; y++)
         for (var x=0; x<w; x++) {
-            if (data[(y*w+x)<<2] < borderBlackThresh)
+            if (data[(y*w+x)<<2] < blackThresh)
                 return y;
         }
     return -1;
@@ -562,7 +702,7 @@ function scanBottomBorder(data) {
     data = data.data;
     for (var y=h-1; y>=0; y--) {
         for (var x=0; x<w; x++) {
-            if (data[(y*w+x)<<2] < borderBlackThresh)
+            if (data[(y*w+x)<<2] < blackThresh)
                 return y;
         }
     }
