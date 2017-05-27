@@ -130,7 +130,24 @@
 <script language=javascript>
 const kColorFg = "black";
 const kColorBg = "white";
-var blackThresh = localStorage['blackThresh'] || 170;
+var blackThresh = (localStorage.blackThresh === undefined)
+    ? 170 : parseInt(localStorage.blackThresh);
+
+var gConfig = {
+    spaceWidth: 1,
+    targetFontHeight: 10
+}
+
+function loadConfig() {
+    for (var k in gConfig) {
+        var strVal = localStorage[k];
+        if (strVal !== undefined) {
+            var val = parseInt(strVal);
+            console.log("Config override from localStorage:", k, ":", gConfig[k], "->", val);
+            gConfig[k] = val;
+        }
+    }
+}
 var gMonospaceFont = false;
 function GlyphModel(w, h, ch)
 {
@@ -395,8 +412,8 @@ gvProto.updateToolTip = function()
 {
     var model = this.model;
     this.widget.setAttribute('title',
-        "Char: '"+this.model.char+"' (code: "+model.char.charCodeAt(0)+")"+
-        '\nwidth: '+model.width);
+        "Char: '"+this.model.char+"'\ncode: "+model.char.charCodeAt(0)+
+        '\nwidth: '+model.width+"\nheight: "+model.height);
 }
 
 gvProto.onPixelChanged = function(x,y,val) {
@@ -543,7 +560,9 @@ function loadEditor(models) {
         var bitmap = models[idx];
         var letter = new GlyphView(bitmap, 2, {active: false, bg: 'rgba(255,255,255,0)'});
         var widget = letter.widget;
-        widget.style.display = "inline-block";
+        var style = widget.style;
+        style.display = "inline-block";
+        style.borderRight='1px solid transparent';
         lcd.appendChild(letter.widget);
    }
    txtInput.onkeydown = function(event) {
@@ -619,7 +638,8 @@ function loadRemoteFont() {
 //var glyph = document.getElementById('glyph');
 function captureFont(font)
 {
-    var cap = new FontCapturer(font, 14, document.getElementById('capture'));
+    var cap = new FontCapturer(font, gConfig.targetFontHeight,
+        document.getElementById('capture'));
     var models = cap.capture();
     loadEditor(models);
 }
@@ -649,7 +669,7 @@ capProto.capture = function()
         console.log("Draw font height is not the same as the target one, capturer will scale the image", this.ratio, "times");
     }
     var models = [];
-    for (var ch=32; ch < 256; ch++) {
+    for (var ch=32; ch < 127; ch++) {
         models.push(this.captureGlyph(String.fromCharCode(ch)));
     };
     return models;
@@ -670,7 +690,8 @@ capProto.drawGlyph = function(ch)
 }
 
 var bottomChars = ["g", "j", "p", "q", "y"];
-var topChars = ["h", "d", "t", "l", "|", "]", "/", "^", "!", "O", "A", "8", "#", "%"];
+//don't include '|', as it may be the only char that high - we want to use as many rows as possible
+var topChars = ["h", "d", "t", "l", "]", "/", "^", "!", "O", "A", "8", "#", "%"];
 var medChars = ["x", "v", "w", "z"];
 
 capProto.detectFontBottom = function()
@@ -710,6 +731,11 @@ capProto.captureGlyph = function(ch)
     //scan width
     var l = scanLeftBorder(data);
     var r = scanRightBorder(data);
+    if (l < 0) { //space
+        assert(r < 0);
+        l = 0;
+        r = gConfig.spaceWidth-1;
+    }
     var actualWidth = r-l+1;
     data = this.ctx.getImageData(l, this.fontTop, actualWidth, this.drawFontHeight);
     var width = data.width;
@@ -815,6 +841,9 @@ function scanBottomBorder(data) {
 
 font-family: "Kimberley", sans-serif;
 */
-window.onload = fontOpenGui(); //loadEditor();
+window.onload = function() {
+    loadConfig();
+    fontOpenGui(); //loadEditor();
+}
 </script>
 </html>
