@@ -27,15 +27,20 @@
 #editorGroup {
     flex: 0 0 auto;
     display: flex;
-    flex-flow: column
+    flex-flow: column;
+    border-right: 1px solid #eeeeee;
 }
 #editor {
    flex: 0 0 auto;
-   border: 1px solid #eeeeee
+   border-bottom: 1px solid #eeeeee;
+   border-left: 1px solid #eeeeee;
 }
 #typingArea {
     flex: 0 0 auto;
-    border: 1px solid #eeeeee
+    border: 0px;
+    border-bottom: 1px solid #eeeeee;
+    background-color: #f0f0f0;
+    height: 80px;
 }
 #lcd {
  height: 128px;
@@ -51,15 +56,14 @@
     flex-wrap: wrap;
     align-self: stretch;
     overflow: auto;
-    border-left: 1px solid #eeeeee;
 }
 #spacer {
     flex: 0 0 10px;
 }
 .glyph {
     flex: 0 0 auto;
-    border-right: 1px solid #eeeeee;
-    border-bottom: 1px solid #eeeeee;
+    border: 1px solid #eeeeee;
+    margin: 4px;
 }
 .openCaption {
     text-align: center;
@@ -84,6 +88,7 @@
 
 .openBtn {
     flex: 0 0 auto;
+    flex-flow: row;
     align-self: center;
     text-align: center;
     border-radius: 8px;
@@ -158,6 +163,11 @@ function GlyphModel(w, h, ch)
     this.listeners = new Array();
 }
 var gmProto = GlyphModel.prototype;
+var UndoOp = Object.freeze({
+    kSetPixel: 1,
+    kDeleteCol: 2,
+    kInsertCol: 3
+});
 
 gmProto.allocate = function()
 {
@@ -171,8 +181,17 @@ gmProto.allocate = function()
         }
     }
 }
+//accessor function to lazily create the undo buffer
+gmProto.undoBuf = function() {
+    var buf = this._undoBuf;
+    if (!buf) {
+        buf = this._undoBuf = [];
+    }
+    return buf;
+}
 
-gmProto.flip = function(x, y) {
+gmProto.flip = function(x, y, isUndo)
+{
     var row = this.rows[y];
     var curr = row[x];
     var val = row[x] = !curr;
@@ -180,9 +199,13 @@ gmProto.flip = function(x, y) {
     for (var i=0; i<count; i++) {
         this.listeners[i].onPixelChanged(x, y, val);
     }
+    if (!isUndo) {
+        this.undoBuf().push([UndoOp.kSetPixel, x, y, curr]);
+    }
     return curr;
 }
-gmProto.set = function(x,y,val)
+
+gmProto.set = function(x, y, val, isUndo)
 {
     var row = this.rows[y];
     var oldVal = row[x];
@@ -193,15 +216,24 @@ gmProto.set = function(x,y,val)
     for (var i=0; i<count; i++) {
         this.listeners[i].onPixelChanged(x, y, val);
     }
+    if (!isUndo) {
+        this.undoBuf().push([UndoOp.kSetPixel, x, y, oldVal]);
+    }
     return oldVal;
 }
-gmProto.deleteColumn = function(x)
+gmProto.deleteColumn = function(x, isUndo)
 {
+    var oldCol = [];
     var h = this.height;
     for (var r = 0; r < h; r++) {
-        this.rows[r].splice(x, 1);
+        var row = this.rows[r];
+        oldCol.push(row[x]);
+        row.splice(x, 1);
     }
     this.width--;
+    if (!isUndo) {
+        this.undoBuf().push([UndoOp.kInsertCol, x, oldCol]);
+    }
     this.notifyDimensionsChanged();
 }
 
@@ -212,19 +244,24 @@ gmProto.notifyDimensionsChanged = function()
         this.listeners[i].onDimensionsChanged();
     }
 }
-gmProto.insertColumn = function(x)
+
+gmProto.insertColumn = function(x, undoCol)
 {
+    var oldModel = this.clone();
     var h = this.height;
     if (x === this.width) {
         for (var r = 0; r < h; r++) {
-            this.rows[r].push(false);
+            this.rows[r].push(undoCol ? undoCol[r] : false);
         }
     } else {
         for (var r = 0; r < h; r++) {
-            this.rows[r].splice(x, 0, false);
+            this.rows[r].splice(x, 0, undoCol ? undoCol[r] : false);
         }
     }
     this.width++;
+    if (!undoCol) {
+        this.undoBuf().push([UndoOp.kDeleteCol, x]);
+    }
     this.notifyDimensionsChanged();
 }
 
@@ -275,6 +312,16 @@ gmProto.clone = function() {
     }
     return result;
 }
+gmProto.migrateListeners = function(newModel)
+{
+//the listeners will detach from us when changeModel() is called,
+//so we can't use a for loop
+    var listeners = this.listeners;
+    while (listeners.length) {
+        listeners[0].changeModel(newModel);
+    }
+}
+
 var gDragged = null;
 var gCtxMenu = null;
 function GlyphView(model, psize, opts)
@@ -289,8 +336,6 @@ function GlyphView(model, psize, opts)
     model.addListener(this);
     if (!opts.active) {
         this.updateToolTip();
-    } else {
-        this.undoBuf = [];
     }
 }
 var gvProto = GlyphView.prototype;
@@ -331,7 +376,6 @@ gvProto.createGui = function() {
                 cell.onclick = function(event) {
                     var c = event.target;
                     var old = self.model.flip(c.x, c.y);
-                    self.undoBuf.push([c.x, c.y, old]);
                 }
                 cell.ondragstart = function(event) {
                     // store a ref. on the dragged elem
@@ -344,9 +388,6 @@ gvProto.createGui = function() {
                     var val = (gDragged.style.backgroundColor === self.bg) ? 0 : 1;
                     var target = event.target;
                     var old = self.model.set(target.x, target.y, val);
-                    if (old !== undefined) {
-                        self.undoBuf.push([target.x, target.y, old]);
-                    }
                 }
 
                 cell.oncontextmenu = function(event) {
@@ -387,13 +428,13 @@ gvProto.ctxMenu = function(event) {
         m.querySelector("#ctxDelCol").onclick = function(event) {
             if (self.model.width <= 1)
                 return;
-            self.deleteColumn(cell.x);
+            self.model.deleteColumn(cell.x);
         };
         m.querySelector("#ctxInsertColLeft").onclick = function(event) {
-            self.insertColumn(cell.x);
+            self.model.insertColumn(cell.x);
         };
         m.querySelector("#ctxInsertColRight").onclick = function(event) {
-            self.insertColumn(cell.x+1);
+            self.model.insertColumn(cell.x+1);
         };
     }
     document.body.appendChild(gCtxMenu);
@@ -429,26 +470,20 @@ gvProto.onModelUpdated = function() {
     this.widget.innerHTML = '';
     this.createGui();
 }
-gvProto.changeModel = function(model, dontClearUndo) {
-    this.model.removeListener(this);
-    this.model = model;
-    if (!dontClearUndo) {
-        this.undoBuf = [];
+gvProto.changeModel = function(model) {
+    if (model === this.model) {
+        return;
     }
+    this.model.removeListener(this);
     model.addListener(this);
+    this.model = model;
+
     var h = this.widget.rows.length;
     var w = this.widget.rows[0].cells.length;
     if (h !== model.height || w !== model.width) {
         this.onDimensionsChanged();
-        return;
-    }
-
-    for (var y = 0; y < h; y++) {
-        var row = this.widget.rows[y];
-        var rowData = model.rows[y];
-        for (var x = 0; x < w; x++) {
-            row.cells[x].style.backgroundColor = rowData[x] ? kColorFg : kColorBg;
-        }
+    } else {
+        this.onModelUpdated();
     }
 }
 
@@ -459,33 +494,25 @@ gvProto.setPixelSpacing = function(n) {
     this.widget.style.borderSpacing = n+'px';
 }
 
-gvProto.insertColumn = function(x) {
-    var oldModel = this.model.clone();
-    this.model.insertColumn(x);
-    this.undoBuf.push(oldModel);
-}
-gvProto.deleteColumn = function(x) {
-    var oldModel = this.model.clone();
-    this.model.deleteColumn(x);
-    this.undoBuf.push(oldModel);
-}
-gvProto.clear = function() {
-   var oldModel = this.model.clone();
-   this.model.clear();
-   this.undoBuf.push(oldModel);
-}
-gvProto.undo = function() {
-    if (!this.undoBuf || this.undoBuf.length < 1) {
+gmProto.undo = function() {
+    if (!this._undoBuf || this._undoBuf.length < 1) {
         console.log("No more undo history");
         return false;
     }
-    var op = this.undoBuf.pop();
-    if (op.length === undefined) {  //bulk change = op is a model
-       this.changeModel(op, true);
-    } else if (op.length === 3) { //pixel change
-        this.model.set(op[0], op[1], op[2]);
-    } else {
-        throw new Error("Unknown undo operation");
+    var op = this._undoBuf.pop();
+    switch(op[0])
+    {
+        case UndoOp.kSetPixel: //pixel change
+            this.set(op[1], op[2], op[3], true);
+            break;
+        case UndoOp.kDeleteCol:
+            this.deleteColumn(op[1], true);
+            break;
+        case UndoOp.kInsertCol:
+            this.insertColumn(op[1], op[2]);
+            break;
+        default:
+            throw new Error("Unknown undo operation");
     }
     return true;
 }
@@ -516,7 +543,10 @@ var loadGui =
   <table width=100%>\
     <tr>\
       <td style='width:50%'>\
-        <div class=openBtn>From file</div></td>\
+        <label class=openBtn>\
+          <span style=''>Local file...</span>\
+          <input type=file style='visibility:hidden;' onchange='loadLocalFile(event);' />\
+        </label></td>\
       <td style='width:50%'>\
         <div class=openBtn onclick='fontSelectGui();'>Capture</div>\
       </td>\
@@ -548,7 +578,7 @@ function loadEditor(models) {
     gEditor.widget.setAttribute('id', 'glyphEditor');
     document.addEventListener("keydown", function(event) {
         if (event.keyCode == 90 && event.ctrlKey) {
-            gEditor.undo();
+            gEditor.model.undo();
         }
     });
     editorCont.appendChild(gEditor.widget);
@@ -562,7 +592,7 @@ function loadEditor(models) {
         var widget = letter.widget;
         var style = widget.style;
         style.display = "inline-block";
-        style.borderRight='1px solid transparent';
+        style.borderRight='2px solid transparent';
         lcd.appendChild(letter.widget);
    }
    txtInput.onkeydown = function(event) {
@@ -633,6 +663,51 @@ function fontSelectGui() {
 var remoteFontUrl = '';
 function loadRemoteFont() {
     remoteFontUrl = prompt("Enter font URL", remoteFontUrl);
+}
+
+function loadLocalFile(event)
+{
+  var file = event.target.files[0];
+  if (!file) {
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    parseFontCSource(e.target.result);
+  };
+  reader.readAsText(file);
+}
+function parseFontCSource(contents)
+{
+    var fontHeight = 7;
+    var bytesPerCol = ((fontHeight+7)/8)|0;
+    var models = [];
+    var lines = contents.match(/(0x[0-9a-fA-F][0-9a-fA-F][,\s]*){4,}/gm);
+    var ll = lines.length;
+    for (var l=0; l<ll; l++) {
+        var line = lines[l];
+        var bytes = line.match(/(0x[0-9a-fA-F][0-9a-fA-F])/g);
+        var bl = bytes.length;
+        var width = bl / bytesPerCol;
+        assert((bl % bytesPerCol) === 0);
+        var model = new GlyphModel(width, fontHeight, String.fromCharCode(l+32));
+        models.push(model);
+        for (var b=0; b < bl; b++) {
+            var col = (b % (width*bytesPerCol)/bytesPerCol)|0;
+            var baseRow = (b / (width*bytesPerCol))|0;
+            var byte = parseInt(bytes[b]);
+
+            var endRow = (baseRow+1)*8;
+            if (endRow > fontHeight) {
+                endRow = fontHeight;
+            }
+            for (var i=baseRow; i<endRow; i++, byte >>= 1) {
+                var row = model.rows[i];
+                row[col] = (byte & 1) ? true : false;
+            }
+        }
+    }
+    loadEditor(models);
 }
 //var canvas = document.getElementById('capture');
 //var glyph = document.getElementById('glyph');
