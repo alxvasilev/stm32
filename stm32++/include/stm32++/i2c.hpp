@@ -7,8 +7,8 @@
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/i2c.h>
 #include <libopencm3/cm3/nvic.h>
-#include <stm32++/timeutl.h>
-#include <stm32++/snprint.h>
+#include <stm32++/timeutl.hpp>
+#include <stm32++/snprint.hpp>
 #include <stm32++/semihosting.hpp>
 #include <stm32++/dma.hpp>
 namespace dma

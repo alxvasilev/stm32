@@ -12,7 +12,7 @@
 #include <libopencm3/stm32/flash.h>
 #include <libopencm3/stm32/i2c.h>
 #include <stm32++/dma.hpp>
-#include <stm32++/timeutl.h>
+#include <stm32++/timeutl.hpp>
 #include <assert.h>
 
 namespace nsadc

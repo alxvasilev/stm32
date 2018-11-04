@@ -9,7 +9,7 @@
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/stm32/dma.h>
 #include <assert.h>
-#include "snprint.h"
+#include "snprint.hpp"
 namespace dma
 {
 template <uint32_t DMA>

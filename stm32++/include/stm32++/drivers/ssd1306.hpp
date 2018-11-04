@@ -24,7 +24,7 @@
 #define SSD1306_HPP_INCLUDED
 
 #include <libopencm3/stm32/i2c.h>
-#include <stm32++/timeutl.h>
+#include <stm32++/timeutl.hpp>
 #include <stm32++/font.hpp>
 #include <string.h>
 

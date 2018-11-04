@@ -6,7 +6,7 @@
 #ifndef _SNPRINT_H
 #define _SNPRINT_H
 
-#include "tostring.h"
+#include "tostring.hpp"
 #include <assert.h>
 #include <stdlib.h>
 #include <alloca.h>

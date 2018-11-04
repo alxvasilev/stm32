@@ -1,4 +1,4 @@
-#include <stm32++/snprint.h>
+#include <stm32++/snprint.hpp>
 #include <stm32++/semihosting.hpp>
 
 #ifdef NOT_EMBEDDED

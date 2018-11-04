@@ -1,6 +1,6 @@
-#include <stm32++/snprint.h>
+#include <stm32++/snprint.hpp>
 
-#ifndef NOT_EMBEDDED
+#ifndef TPRINTF_NOT_EMBEDDED
     #include <stm32++/semihosting.hpp>
     PrintSinkFunc gPrintSinkFunc = shost::fputs;
 #else
