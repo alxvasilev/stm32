@@ -26,6 +26,7 @@
 #include <libopencm3/stm32/i2c.h>
 #include <stm32++/timeutl.h>
 #include <stm32++/font.hpp>
+#include <string.h>
 
 #define SSD1306_SETCONTRAST 0x81
 #define SSD1306_DISPLAYALLON_RESUME 0xA4

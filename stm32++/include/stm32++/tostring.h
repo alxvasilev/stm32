@@ -12,9 +12,9 @@
 #include <stdint.h>
 #include <math.h> //for padding calculation we need log10
 
-static_assert(sizeof(size_t) == sizeof(void*));
-static_assert(sizeof(size_t) == sizeof(ptrdiff_t));
-static_assert(std::is_unsigned<size_t>::value);
+static_assert(sizeof(size_t) == sizeof(void*), "size_t is not same size as void*");
+static_assert(sizeof(size_t) == sizeof(ptrdiff_t), "size_t is not same size as ptrdiff_t");
+static_assert(std::is_unsigned<size_t>::value, "size_t is not unsigned");
 
 /** Various flags that specify how a value is converted to string.
  * Lower 8 bits are reserved for the numeric system base (for integer numbers)
@@ -23,7 +23,7 @@ static_assert(std::is_unsigned<size_t>::value);
 enum: uint16_t {
     kFlagsBaseMask = 0xff,
     kFlagsPrecMask = 0xff,
-    kNoFlags = 0, kLowerCase = 0x0, kUpperCase = 0x1000,
+    kLowerCase = 0x0, kUpperCase = 0x1000,
     kDontNullTerminate = 0x0200, kNoPrefix = 0x0400
 };
 
@@ -39,7 +39,7 @@ constexpr uint8_t precFromFlags(Flags flags)
     return prec ? prec : 6;
 }
 
-template <size_t base, Flags flags=kNoFlags>
+template <size_t base, Flags flags=0>
 struct DigitConverter;
 
 template <Flags flags>
@@ -209,31 +209,31 @@ struct NumLenForBase
   enum: uint8_t { value = sizeof(T)*(uint8_t)(log10f(256)/log10f(base)+0.9) };
 };
 
-template <Flags flags=kNoFlags, class T>
+template <Flags flags=0, class T>
 IntFmt<T, flags> fmtInt(T aVal, uint8_t aPad=NumLenForBase<T,baseFromFlags(flags)>::value)
 { return IntFmt<T, flags>(aVal, aPad); }
 
-template <Flags flags=kNoFlags, class T>
+template <Flags flags=0, class T>
 IntFmt<T, (flags&~kFlagsBaseMask)|16> fmtHex(T aVal, uint8_t aPad=NumLenForBase<T,16>::value)
 { return IntFmt<T, (flags&~kFlagsBaseMask)|16>(aVal, aPad); }
 
-template <Flags flags=kNoFlags, class T>
+template <Flags flags=0, class T>
 IntFmt<T, (flags&~kFlagsBaseMask)|2> fmtBin(T aVal, uint8_t aPad=NumLenForBase<T,2>::value)
 { return IntFmt<T, (flags&~kFlagsBaseMask)|2>(aVal, aPad); }
 
-template <Flags flags=kNoFlags>
+template <Flags flags=0>
 IntFmt<uint8_t, (flags&~kFlagsBaseMask)|16> fmtHex8(uint8_t aVal, uint8_t aPad=2)
 { return IntFmt<uint8_t, (flags&~kFlagsBaseMask)|16>(aVal, aPad); }
 
-template <Flags flags=kNoFlags>
+template <Flags flags=0>
 IntFmt<uint8_t, (flags&~kFlagsBaseMask)|2> fmtBin8(uint8_t aVal, uint8_t aPad=8)
 { return IntFmt<uint8_t, (flags&~kFlagsBaseMask)|2>(aVal, aPad); }
 
-template <Flags flags=kNoFlags>
+template <Flags flags=0>
 IntFmt<uint16_t, (flags&~kFlagsBaseMask)|16> fmtHex16(uint16_t aVal, uint8_t aPad=4)
 { return IntFmt<uint16_t, (flags&~kFlagsBaseMask)|16>(aVal, aPad); }
 
-template <Flags flags=kNoFlags>
+template <Flags flags=0>
 IntFmt<uint16_t, (flags&~kFlagsBaseMask)|2> fmtBin16(uint16_t aVal, uint8_t aPad=16)
 { return IntFmt<uint16_t, (flags&~kFlagsBaseMask)|2>(aVal, aPad); }
 
@@ -244,20 +244,20 @@ IntFmt<T, flags> fmtStruct(T aVal)
     return Fmt(*((typename Fmt::ScalarType*)&aVal));
 }
 
-template <Flags flags=kNoFlags, class P>
+template <Flags flags=0, class P>
 typename std::enable_if<std::is_pointer<P>::value && !is_char_ptr<P>::value, char*>::type
 toString(char *buf, size_t bufsize, P ptr)
 {
     return toString(buf, bufsize, fmtHex<flags>(ptr));
 }
 
-template<Flags flags=kNoFlags, typename Val>
+template<Flags flags=0, typename Val>
 char* toString(char *buf, size_t bufsize, IntFmt<Val, flags> num)
 {
     return toString<num.flags>(buf, bufsize, num.value, num.padding);
 }
 
-template<Flags flags=kNoFlags>
+template<Flags flags=0>
 typename std::enable_if<(flags & kDontNullTerminate) == 0, char*>::type
 toString(char* buf, size_t bufsize, const char* val)
 {
@@ -278,7 +278,7 @@ toString(char* buf, size_t bufsize, const char* val)
     return buf;
 }
 
-template<Flags flags=kNoFlags>
+template<Flags flags=0>
 typename std::enable_if<(flags & kDontNullTerminate), char*>::type
 toString(char* buf, size_t bufsize, const char* val)
 {
@@ -292,7 +292,7 @@ toString(char* buf, size_t bufsize, const char* val)
     return buf;
 }
 
-template<Flags flags=kNoFlags, typename Val>
+template<Flags flags=0, typename Val>
 typename std::enable_if<std::is_same<Val, char>::value
     && (flags & kDontNullTerminate), char*>::type
 toString(char* buf, size_t bufsize, Val val)
@@ -303,7 +303,7 @@ toString(char* buf, size_t bufsize, Val val)
     return buf;
 }
 
-template<Flags flags=kNoFlags, typename Val>
+template<Flags flags=0, typename Val>
 typename std::enable_if<std::is_same<Val, char>::value
     && (flags & kDontNullTerminate) == 0, char*>::type
 toString(char* buf, size_t bufsize, Val val)
@@ -412,7 +412,7 @@ char* toString(char *buf, size_t bufsize, FpFmt<Val, aFlags> fp)
     return toString<aFlags|(externFlags&~kFlagsPrecMask), Val>(buf, bufsize, fp.value, fp.padding);
 }
 
-template <Flags aFlags=kNoFlags>
+template <uint8_t aFlags=0>
 struct RptChar
 {
     char mChar;
@@ -423,14 +423,14 @@ public:
     uint16_t count() const { return mCount; }
 };
 
-template <Flags aFlags = kNoFlags>
+template <Flags aFlags = 0>
 RptChar<aFlags> rptChar(char ch, uint16_t count)
 {
     return RptChar<aFlags>(ch, count);
 }
 
-template <Flags aFlags=kNoFlags>
-char* toString(char* buf, size_t bufsize, RptChar<aFlags> val)
+template <Flags aFlags=0, uint8_t rptFlags>
+char* toString(char* buf, size_t bufsize, RptChar<rptFlags> val)
 {
     if (!bufsize)
         return nullptr;

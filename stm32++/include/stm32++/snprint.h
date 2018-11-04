@@ -9,6 +9,7 @@
 #include "tostring.h"
 #include <assert.h>
 #include <stdlib.h>
+#include <alloca.h>
 #ifndef NOT_EMBEDDED
     #include "utils.hpp" //for interrupt safe stuff
     void semihostingPrintSink(const char* str, size_t len, int fd=1);
@@ -77,13 +78,14 @@ ftprintf(uint8_t fd, const char* fmtStr, Args... args)
     return size;
 }
 
+extern PrintSinkFunc gPrintSinkFunc;
+extern void* gPrintSinkUserp;
+extern uint8_t gPrintSinkFlags;
+
 template <size_t BufSize=64, typename... Args>
 typename std::enable_if<BufSize >= 0, size_t>::type
 ftprintf(uint8_t fd, const char* fmtStr, Args... args)
 {
-    extern PrintSinkFunc gPrintSinkFunc;
-    extern void* gPrintSinkUserp;
-    extern uint8_t gPrintSinkFlags;
     size_t bufsize = BufSize;
 
     char* sbuf;

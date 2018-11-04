@@ -11,8 +11,10 @@
 #include <libopencm3/stm32/adc.h>
 #include <libopencm3/stm32/flash.h>
 #include <libopencm3/stm32/i2c.h>
-#include <stm32++/usart.hpp>
+#include <stm32++/dma.hpp>
 #include <stm32++/timeutl.h>
+#include <assert.h>
+
 namespace nsadc
 {
 enum: uint16_t {
@@ -61,7 +63,7 @@ protected:
     template <typename T>
     uint8_t sampleNsTimeToCode(T nanosec)
     {
-        static_assert(std::is_integral<T>::value);
+        static_assert(std::is_integral<T>::value, "Time is not numeric");
         return sampleCyclesToCode(nanosec/(100000000/mClockFreq));
     }
     template <typename T>
@@ -69,7 +71,7 @@ protected:
     uint8_t sampleTimeToCode(Clocks clocks) { return clocks.value(); }
     void enableVrefAsync()
     {
-        static_assert(ADC == ADC1);
+        static_assert(ADC == ADC1, "ADC device is not ADC1");
         /* We want to read the temperature sensor, so we have to enable it. */
         adc_enable_temperature_sensor();
         //17100 nanoseconds sample time required for temperature sensor

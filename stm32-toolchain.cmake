@@ -15,7 +15,7 @@ set(CMAKE_ASM_COMPILER arm-none-eabi-as)
 set(CMAKE_LINKER arm-none-eabi-ld)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-common -fno-exceptions -fno-rtti -mcpu=cortex-m3 -mthumb -nostartfiles" CACHE STRING "")
-set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS}" CACHE STRING "")
+set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS} -std=c++14" CACHE STRING "")
 set(CMAKE_C_FLAGS_DEBUG "-g -O0" CACHE STRING "")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0" CACHE STRING "")
 

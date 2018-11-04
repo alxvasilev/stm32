@@ -6,7 +6,7 @@
 Semihosting can be used only when compiling for embedeed target
 #endif
 
-static_assert(sizeof(size_t) == sizeof(void*));
+static_assert(sizeof(size_t) == sizeof(void*), "");
 
 namespace shost
 {
