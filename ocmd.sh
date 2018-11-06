@@ -59,8 +59,7 @@ if [ -z $pid ]; then
 
     pid=`pidof openocd`
     echo -e "${MARK}OpenOCD telnet port detected, openOCD pid is $pid, proceeding with command(s)${NOMARK}"
-    echo -e "log_output /dev/null\nexit" | (telnet localhost 4444 2>&1) > /dev/null
-
+    echo -e "log_output /dev/null\nexit" | (nc localhost 4444 2>&1) > /dev/null
 fi
 
 # exit should go on another line, because if there is an error in the user
