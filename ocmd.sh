@@ -59,6 +59,8 @@ if [ -z $pid ]; then
 
     pid=`pidof openocd`
     echo -e "${MARK}OpenOCD telnet port detected, openOCD pid is $pid, proceeding with command(s)${NOMARK}"
+
+    # Disable openocd outputting stuff to the terminal that started it
     echo -e "log_output /dev/null\nexit" | (nc localhost 4444 2>&1) > /dev/null
 fi
 
