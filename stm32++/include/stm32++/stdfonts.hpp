@@ -1,0 +1,9 @@
+#ifndef FONTS_H
+#define FONTS_H
+#include <stm32++/font.hpp>
+extern Font Font_7x10;
+extern Font Font_11x18;
+extern Font Font_16x26;
+
+#endif
+
