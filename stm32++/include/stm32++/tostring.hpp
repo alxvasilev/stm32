@@ -195,7 +195,7 @@ struct IntFmt
 {
     typedef typename UnsignedEquiv<T>::type ScalarType;
     enum: uint8_t { base = baseFromFlags(aFlags) };
-    static constexpr Flags flags = aFlags;
+    static constexpr Flags flags = aFlags & kFlagsBaseMask;
     ScalarType value;
     uint8_t padding;
     explicit IntFmt(T aVal, uint8_t aPad=0): value((ScalarType)(aVal)), padding(aPad){}
@@ -251,10 +251,10 @@ toString(char *buf, size_t bufsize, P ptr)
     return toString(buf, bufsize, fmtHex<flags>(ptr));
 }
 
-template<Flags flags=0, typename Val>
-char* toString(char *buf, size_t bufsize, IntFmt<Val, flags> num)
+template<Flags flags=0, Flags fmtFlags, typename Val>
+char* toString(char *buf, size_t bufsize, IntFmt<Val, fmtFlags> num)
 {
-    return toString<num.flags>(buf, bufsize, num.value, num.padding);
+    return toString<num.flags & (flags & ~kFlagsBaseMask)>(buf, bufsize, num.value, num.padding);
 }
 
 template<Flags flags=0>
@@ -394,7 +394,7 @@ template <class T, Flags aFlags>
 struct FpFmt
 {
     enum: uint8_t { prec = precFromFlags(aFlags) };
-    constexpr static Flags flags = aFlags;
+    constexpr static Flags flags = aFlags & kFlagsPrecMask;
     T value;
     uint8_t padding;
     FpFmt(T aVal, uint8_t aPad): value(aVal), padding(aPad){}
@@ -406,10 +406,13 @@ auto fmtFp(T val, uint8_t pad=0)
     return FpFmt<T, aFlags>(val, pad);
 }
 
-template <Flags externFlags, Flags aFlags=6, typename Val>
-char* toString(char *buf, size_t bufsize, FpFmt<Val, aFlags> fp)
+template <Flags generalFlags, Flags fpFlags, typename Val>
+char* toString(char *buf, size_t bufsize, FpFmt<Val, fpFlags> fp)
 {
-    return toString<aFlags|(externFlags&~kFlagsPrecMask), Val>(buf, bufsize, fp.value, fp.padding);
+    // Extract precision and padding, merge other flags from fpFlags to aFlags to
+    // and forward to the toString(float) version
+    // General flags filtered out from fpFlags and fp formatting flags filtered out from general flags
+    return toString<fp.flags|(generalFlags & ~kFlagsPrecMask), Val>(buf, bufsize, fp.value, fp.padding);
 }
 
 template <uint8_t aFlags=0>
