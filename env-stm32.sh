@@ -3,6 +3,10 @@
 # @author Alexander Vassilev
 # @copyright BSD License
 
+export RED='\033[1;31m'
+GREEN="\033[0;32m"
+NOMARK="\033[0;0m"
+
 owndir=`echo "$(cd $(dirname "${BASH_SOURCE[0]}"); pwd)"`
 
 if [ "$#" != "1" ]; then
@@ -12,7 +16,7 @@ else
 fi
 
 if [ ! -d "$STM32_SYSROOT" ]; then
-   echo -e "\033[1;31msysroot '$STM32_SYSROOT' dir does not exist\033[0m"
+   echo -e "${RED}sysroot '$STM32_SYSROOT' dir does not exist${NOMARK}"
    return 2
 fi
 
@@ -54,9 +58,13 @@ alias as=arm-none-eabi-as
 alias nm=arm-none-eabi-nm
 alias strip=arm-none-eabi-strip
 
-echo -e "Your environment has been set up for STM32 cross-compilation.\n\n\
+echo -e "\
+===================================================================\n\
+Your environment has been set up for STM32 cross-compilation.\n\
 SYSROOT=$STM32_SYSROOT\n
-Use the 'xcmake' command instead of 'cmake' in order to configure project for\n\
+Use '${GREEN}xcmake${NOMARK}' instead of 'cmake' in order to configure project for\n\
 cross-compilation\n\
-Use the 'flash' command to flash chip, see flash --help for details\n\
-Use 'ocmd <commands>' to send any command to OpenOCD.\n"
+Use '${GREEN}flash${NOMARK}' to flash chip, see flash --help for details\n\
+Use '${GREEN}ocmd${NOMARK} <commands>' to send any command to OpenOCD.\n\
+Enjoy programming!
+==================================================================="

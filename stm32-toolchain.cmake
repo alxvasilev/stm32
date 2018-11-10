@@ -54,23 +54,28 @@ else()
     set(optLinkScript "${defaultLinkScript}" CACHE PATH "Linker script" FORCE)
 endif()
 
-set(optStdioSemihosting 0 CACHE BOOL "Link to a version of the standard C library that supports semihosting")
-set(optSemihostingInRelease 0 CACHE BOOL "Use semihosting C standard lib in release mode (careful!)")
+set(optStdioLibcInDebug 0 CACHE BOOL
+"In DEBUG mode, link to a version of the standard C library that has stdio and printf(), and supports semihosting.\n\
+This has a somewhat large footprint - if you just need printing via semihosting,\n\
+you can just use tprint()")
+set(optStdioLibcInRelease 0 CACHE BOOL
+"In RELEASE mode, use the stdio-enabled standard C library")
 
 add_definitions(-D${optChipFamily} -Wall)
 include_directories("${CMAKE_CURRENT_LIST_DIR}/stm32++/include")
 set(CMAKE_EXE_LINKER_FLAGS "-nostartfiles -T${optLinkScript} ${linkDirs}" CACHE STRING "")
 
-if (optStdioSemihosting AND optSemihostingInRelease)
-    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "--specs=rdimon.specs -lc")
+
+if (optStdioLibcInDebug)
+    set(CMAKE_EXE_LINKER_FLAGS_DEBUG "--specs=rdimon.specs -lc" CACHE STRING "" FORCE)
 else()
-    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "--specs=nosys.specs")
+    set(CMAKE_EXE_LINKER_FLAGS_DEBUG "--specs=nosys.specs" CACHE STRING "" FORCE)
 endif()
 
-if (optStdioSemihosting)
-    set(CMAKE_EXE_LINKER_FLAGS_DEBUG "--specs=rdimon.specs -lc" CACHE STRING "")
+if (optStdioLibcInRelease)
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "--specs=rdimon.specs -lc"  CACHE STRING "" FORCE)
 else()
-    set(CMAKE_EXE_LINKER_FLAGS_DEBUG "--specs=nosys.specs" CACHE STRING "")
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "--specs=nosys.specs"  CACHE STRING "" FORCE)
 endif()
 
 set(CMAKE_FIND_ROOT_PATH "${CMAKE_SYSROOT}")
@@ -78,6 +83,14 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 
+# Default to debug build
 set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type")
 set_Property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release MinSizeRel RelWithDebInfo)
+
+# Utilities to facilitate user CMakeLists
+file(GLOB STM32PP_SRCS "" "${ENV_SCRIPTS_DIR}/stm32++/src/*")
+
+function(stm32_create_flash_target imgname)
+    add_custom_target(flash bash -c "${ENV_SCRIPTS_DIR}/flash.sh ./${imgname}" DEPENDS ${imgname})
+endfunction()
 
