@@ -214,27 +214,27 @@ IntFmt<T, flags> fmtInt(T aVal, uint8_t aPad=NumLenForBase<T,baseFromFlags(flags
 { return IntFmt<T, flags>(aVal, aPad); }
 
 template <Flags flags=0, class T>
-IntFmt<T, (flags&~kFlagsBaseMask)|16> fmtHex(T aVal, uint8_t aPad=NumLenForBase<T,16>::value)
+auto fmtHex(T aVal, uint8_t aPad=NumLenForBase<T,16>::value)
 { return IntFmt<T, (flags&~kFlagsBaseMask)|16>(aVal, aPad); }
 
 template <Flags flags=0, class T>
-IntFmt<T, (flags&~kFlagsBaseMask)|2> fmtBin(T aVal, uint8_t aPad=NumLenForBase<T,2>::value)
+auto fmtBin(T aVal, uint8_t aPad=NumLenForBase<T,2>::value)
 { return IntFmt<T, (flags&~kFlagsBaseMask)|2>(aVal, aPad); }
 
 template <Flags flags=0>
-IntFmt<uint8_t, (flags&~kFlagsBaseMask)|16> fmtHex8(uint8_t aVal, uint8_t aPad=2)
+auto fmtHex8(uint8_t aVal, uint8_t aPad=2)
 { return IntFmt<uint8_t, (flags&~kFlagsBaseMask)|16>(aVal, aPad); }
 
 template <Flags flags=0>
-IntFmt<uint8_t, (flags&~kFlagsBaseMask)|2> fmtBin8(uint8_t aVal, uint8_t aPad=8)
+auto fmtBin8(uint8_t aVal, uint8_t aPad=8)
 { return IntFmt<uint8_t, (flags&~kFlagsBaseMask)|2>(aVal, aPad); }
 
 template <Flags flags=0>
-IntFmt<uint16_t, (flags&~kFlagsBaseMask)|16> fmtHex16(uint16_t aVal, uint8_t aPad=4)
+auto fmtHex16(uint16_t aVal, uint8_t aPad=4)
 { return IntFmt<uint16_t, (flags&~kFlagsBaseMask)|16>(aVal, aPad); }
 
 template <Flags flags=0>
-IntFmt<uint16_t, (flags&~kFlagsBaseMask)|2> fmtBin16(uint16_t aVal, uint8_t aPad=16)
+auto fmtBin16(uint16_t aVal, uint8_t aPad=16)
 { return IntFmt<uint16_t, (flags&~kFlagsBaseMask)|2>(aVal, aPad); }
 
 template <Flags flags=16, class T>
@@ -254,7 +254,7 @@ toString(char *buf, size_t bufsize, P ptr)
 template<Flags flags=0, Flags fmtFlags, typename Val>
 char* toString(char *buf, size_t bufsize, IntFmt<Val, fmtFlags> num)
 {
-    return toString<num.flags & (flags & ~kFlagsBaseMask)>(buf, bufsize, num.value, num.padding);
+    return toString<num.flags | (flags & ~kFlagsBaseMask)>(buf, bufsize, num.value, num.padding);
 }
 
 template<Flags flags=0>
@@ -412,7 +412,7 @@ char* toString(char *buf, size_t bufsize, FpFmt<Val, fpFlags> fp)
     // Extract precision and padding, merge other flags from fpFlags to aFlags to
     // and forward to the toString(float) version
     // General flags filtered out from fpFlags and fp formatting flags filtered out from general flags
-    return toString<fp.flags|(generalFlags & ~kFlagsPrecMask), Val>(buf, bufsize, fp.value, fp.padding);
+    return toString<fp.flags | (generalFlags & ~kFlagsPrecMask), Val>(buf, bufsize, fp.value, fp.padding);
 }
 
 template <uint8_t aFlags=0>
