@@ -90,6 +90,13 @@ If `optStdioLibcInDebug` or `optStdioLibcInRelease` are enabled, the linker
  and format detection is static, at compile time, which greatly speeds up
  the parsing of the format string at runtime. See the documentation of the stm32++
  library for more details.
+- Convenience make targets
+The toolchain can define the following convenience make targets:
+    - `make flash` - Build (if necessary) the firmware, flash it to the chip, using
+    ocmd.sh, and reset the chip.
+    - `make gdb` - Start gdb and configure it to look at the project's source code dir,
+    load the firmware file, and connect to openOCD via the debuging target interface.
+
 - CMake conveneice defines and functions, as follows:
   - `STM32PP_SRCS` - The .cpp source files of the stm32++ library. Add this to
   your application's source file list if you want to use stm32++
