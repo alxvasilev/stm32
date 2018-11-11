@@ -52,21 +52,21 @@ It must be _sourced_ (and not run in a subshell). What it does is to provide a
  
 ## stm32-toolchain.cmake
 This is the cmake toolchain that will be used by CMake. It:
+
 - Sets up the CMake sysroot for the toolchain to point to the appropriate location.
 The CMake sysroot directory is intentended to contain system headers and libraries,
 and is the default search location when CMake is instructed to use a library.
 On Unix-like systems, the sysroot is usually the /usr directory, where system-wide
 libs and headers are installed.
-  Two versions of the sysroot directory are provided:
-  = ./sysroot - when libopencm3 and stm32++
-  = ./sysroot-baremetal - when not using any libraries, programming baremetal.
-  The purpose of the sysroot directory
+    Two versions of the sysroot directory are provided:
+    - ./sysroot - when libopencm3 and stm32++
+    - ./sysroot-baremetal - when not using any libraries, programming baremetal.
+
 - Based on the option to use or not libopencm3 (`optUseOpenCm3`), and on the type
  of chip used (`optChipFamily`), sets up a global define for the chip type and
  path to a linker script. The toolchain script automatically detects the supported
  by libopencm3 STM32 families(F1, F2, ...) and, based on the selected one, detects
- the supported models and fills up the possible linker script paths.
- 
+ the supported models and fills up the possible linker script paths. 
  For the barebones mode (no libopencm3), stm32.ld is used, which may be too
  minimalistic and the user may want to copy and extend it. In barebones mode, the
  script path can be manually set. This is unlike the opencm3 mode, where the linker
@@ -90,7 +90,7 @@ libs and headers are installed.
  and format detection is static, at compile time, which greatly speeds up
  the parsing of the format string at runtime. See the documentation of the stm32++
  library for more details.
-
+- CMake API - The toolchain provides several f
 ## ocmd.sh
 Sends a command to OpenOCD via the telnet port. First the script checks if 
  OpenOCD is running. If not, it is started and the script waits till it starts
@@ -101,7 +101,7 @@ Sends a command to OpenOCD via the telnet port. First the script checks if
  you can call the scripts without arguments.
 
 ## flash.sh
-Flashesh the specified file to the chip and either resets or halts it, depending on
+Flashes the specified file to the chip and either resets or halts it, depending on
 a command line option. For help on usage, you can call the script without arguments.
 
 ## Example session
@@ -116,11 +116,11 @@ $ cd myproject
 $ echo -e \
 "cmake_minimum_required(VERSION 2.8)\n\
 \n\
-project(photodiode)\n\
+project(myproject)\n\
 set(SRCS main.cpp ${STM32PP_SRCS})\n\
 set(imgname "${CMAKE_PROJECT_NAME}.elf")\n\
 add_executable(${imgname} ${SRCS})\n\
-stm32_create_flash_target(${imgname})\n\"\
+stm32_create_utility_targets(${imgname})\n\"\
 > ./CMakeLists.txt
 
 // Create a .cpp source file with the main() function

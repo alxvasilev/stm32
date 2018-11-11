@@ -90,7 +90,7 @@ set_Property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release MinSizeRel Re
 # Utilities to facilitate user CMakeLists
 file(GLOB STM32PP_SRCS "" "${ENV_SCRIPTS_DIR}/stm32++/src/*")
 
-function(stm32_create_flash_target imgname)
+function(stm32_create_utility_targets imgname)
     add_custom_target(flash bash -c "${ENV_SCRIPTS_DIR}/flash.sh ./${imgname}" DEPENDS "${imgname}")
     add_custom_target(gdb
         arm-none-eabi-gdb -ex 'file ${CMAKE_CURRENT_BINARY_DIR}/${imgname}'
