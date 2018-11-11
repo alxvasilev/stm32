@@ -1,4 +1,4 @@
-# stm32-misc
+# stm32-env
 
 This project aims to create a more or less complete STM32 development environment,
 based on gcc-none-eabi, OpenOCD for interfacing with the controller,
@@ -76,3 +76,41 @@ Sends a command to OpenOCD via the telnet port. First the script checks if
 ## flash.sh
 Flashesh the specified file to the chip and either resets or halts it, depending on
 a command line option. For help on usage, you can call the script without arguments.
+
+## Example session
+// Install the environment
+$ source ../../stm32-env/env-stm32.sh
+// Create project directory
+$ mkdir myproject
+$ cd myproject
+// Create CMakeLists.txt file that describes how to build the project
+$ echo -e \
+"cmake_minimum_required(VERSION 2.8)\n\
+\n\
+project(photodiode)\n\
+set(SRCS main.cpp ${STM32PP_SRCS})\n\
+set(imgname "${CMAKE_PROJECT_NAME}.elf")\n\
+add_executable(${imgname} ${SRCS})\n\
+stm32_create_flash_target(${imgname})\n\"\
+> ./CMakeLists.txt
+
+// Create a .cpp source file with the main() function
+$ echo "int main() { for (;;); return 0; }" > ./main.cpp
+
+// Create build directory
+$ mkdir build
+$ cd build
+
+// Initialize cmake configuration
+$ xcmake ..
+
+// Edit cmake configuration, check and set options
+$ ccmake .
+
+// Build the application, flash it to the chip and run it.
+// The ST-Link must be connected
+$ make flash
+
+// reset the chip
+$ ocmd reset
+
