@@ -73,6 +73,7 @@ libs and headers are installed.
  chip family. You should choose the one that matches the exact model of your chip.
 
 - `stdio`
+
  If `optStdioLibcInDebug` or `optStdioLibcInRelease` are enabled, the linker
  is directed to use a version of the standard C library that has an implementation
  of stdio, with semihosting support (`--specs=rdimon.specs -lc`). This enables the
