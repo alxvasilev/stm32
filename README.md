@@ -105,6 +105,8 @@ Flashesh the specified file to the chip and either resets or halts it, depending
 a command line option. For help on usage, you can call the script without arguments.
 
 ## Example session
+
+```
 // Install the environment
 $ source ../../stm32-env/env-stm32.sh
 // Create project directory
@@ -140,4 +142,4 @@ $ make flash
 
 // reset the chip
 $ ocmd reset
-
+```
