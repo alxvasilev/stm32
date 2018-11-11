@@ -14,19 +14,19 @@ Please have in mind that the library is a work in progress, it is not perfect an
 there may be bugs.
 
 Scripts are provided for:
- - setting up the shell environment: env-stm32.sh
- - executing OpenOCD commands and starting it if it's not running: ocmd.sh
- - flash an image, using ocmd.sh: flash.sh
+ - setting up the shell environment: `env-stm32.sh`
+ - executing OpenOCD commands and starting it if it's not running: `ocmd.sh`
+ - flash an image, using ocmd.sh: `flash.sh`
 
 Additionally, the environment can work in a minimalistic fashion, without
-any base libraries, but just STM32F10x.h, a minimal set of CMSIS headers and a minimal
-link script (stm32.ld). This mode can be suitable for writing bootloaders.
+any base libraries, but just `STM32F10x.h`, a minimal set of CMSIS headers and a minimal
+link script (`stm32.ld`). This mode can be suitable for writing bootloaders.
 Each component is described in more detail below:
 
 ## env-stm32.sh
 
 It must be _sourced_ (and not run in a subshell). What it does is to provide a
- thin shell around the cmake command that passes to it the stm32-toolchain.cmake
+ thin shell around the cmake command that passes to it the `stm32-toolchain.cmake`
  toolchain. The actual work of setting up the build is done by the toolchain file.
  The env script also sets up convenience aliases for the gcc toolchain, so that for
  example gcc maps to arm-none-eabi-gcc, etc. It also alters the shell propmt to easily
@@ -42,9 +42,8 @@ It must be _sourced_ (and not run in a subshell). What it does is to provide a
  The env script also provides convenience aliases for:
   - the toolchain executables, removing the necessity to type the arm-none-eabi- prefix.
     That is, gdb will map to arm-none-eabi-gdb, gcc will map to arm-none-eabi-gcc, etc
-  - the ocmd.sh and flash.sh scripts, so they can be invoked as shell functions rather
-    than specifying path and filename.
-    That is, instead of running
+  - the `ocmd.sh` and `flash.sh` scripts, so they can be invoked as shell functions rather
+    than specifying path and filename. That is, instead of running
  
     `/path/to/ocmd.sh <command(s)>`
     you can run:
@@ -59,8 +58,8 @@ and is the default search location when CMake is instructed to use a library.
 On Unix-like systems, the sysroot is usually the /usr directory, where system-wide
 libs and headers are installed.
     Two versions of the sysroot directory are provided:
-    - ./sysroot - when libopencm3 and stm32++
-    - ./sysroot-baremetal - when not using any libraries, programming baremetal.
+    - `./sysroot` - when libopencm3 and stm32++
+    - `./sysroot-baremetal` - when not using any libraries, programming baremetal.
 
 - Based on the option to use or not libopencm3 (`optUseOpenCm3`), and on the type
  of chip used (`optChipFamily`), sets up a global define for the chip type and
@@ -73,7 +72,8 @@ libs and headers are installed.
  script path is a drop down list with the libopencm3-provided ones, for the selected
  chip family. You should choose the one that matches the exact model of your chip.
 
-- stdio - if optStdioLibcInDebug or optStdioLibcInRelease are enabled, the linker
+- `stdio`
+ If `optStdioLibcInDebug` or `optStdioLibcInRelease` are enabled, the linker
  is directed to use a version of the standard C library that has an implementation
  of stdio, with semihosting support (`--specs=rdimon.specs -lc`). This enables the
  use of file descriptors, printf() and similar standard functions for standard I/O
@@ -85,12 +85,17 @@ libs and headers are installed.
  BKPT / SVC ARM instruction. It is not necessary to use the stdio-enabled C
  standard lib, if the only thing needed is simple console output for logging.
  Support for this is built into the stm32++ library, which provides a very fast and
- lightweight printf-like formatting facility - tprintf. It is implemented
+ lightweight `printf`-like formatting facility - `tprintf`. It is implemented
  using C++ templates and is type-safe, unlike the classic printf. The argument type
  and format detection is static, at compile time, which greatly speeds up
  the parsing of the format string at runtime. See the documentation of the stm32++
  library for more details.
-- CMake API - The toolchain provides several f
+- CMake conveneice defines and functions, as follows:
+  - `STM32PP_SRCS` - The .cpp source files of the stm32++ library. Add this to
+  your application's source file list if you want to use stm32++
+  - `stm32_create_utility_targets(imgname)` - Call this function in order to have
+  the convenience `flash` and `gdb` make targets automatically created and set up.
+
 ## ocmd.sh
 Sends a command to OpenOCD via the telnet port. First the script checks if 
  OpenOCD is running. If not, it is started and the script waits till it starts
