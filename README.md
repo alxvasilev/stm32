@@ -72,9 +72,7 @@ libs and headers are installed.
  script path is a drop down list with the libopencm3-provided ones, for the selected
  chip family. You should choose the one that matches the exact model of your chip.
 
-- `stdio`
-
- If `optStdioLibcInDebug` or `optStdioLibcInRelease` are enabled, the linker
+- `stdio` If `optStdioLibcInDebug` or `optStdioLibcInRelease` are enabled, the linker
  is directed to use a version of the standard C library that has an implementation
  of stdio, with semihosting support (`--specs=rdimon.specs -lc`). This enables the
  use of file descriptors, printf() and similar standard functions for standard I/O
