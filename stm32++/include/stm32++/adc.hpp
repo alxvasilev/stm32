@@ -2,6 +2,11 @@
  * @copyright BSD License
  */
 
+/*TODO:
+ - Implement adc resulution and word width selection
+ - Interleaved mode
+*/
+
 #ifndef STM32PP_ADC_HPP
 #define STM32PP_ADC_HPP
 
@@ -9,10 +14,11 @@
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/adc.h>
-#include <libopencm3/stm32/flash.h>
+#include <libopencm3/stm32/flash.h> //needed for the custom system clocks setup that allows max sample rate
 #include <libopencm3/stm32/i2c.h>
 #include <stm32++/dma.hpp>
 #include <stm32++/timeutl.hpp>
+#include <stm32++/common.hpp>
 #include <assert.h>
 
 namespace nsadc
@@ -20,55 +26,54 @@ namespace nsadc
 enum: uint16_t {
     kOptScanMode = 1,
     kOptContConv = 2,
-    kOptUseDma = 4, kOptDmaDontEnableClock = 8,
+    kOptDmaDontEnableClock = 8,
     kOptDmaCircular = 16, kOptDmaNoDoneIntr = 32,
     kOptDmaDontEnableIrq = 64,
     kOptNoVref = 128,
     kOptNoCalibrate = 256
 };
 
-enum: uint8_t { kStateRunning = 1, kStateDataReady = 2 };
-struct Clocks
+enum: uint8_t { kStateDataReady = 1 };
+// To differentiate the type of value when passing to setChannels()
+struct ClockCnt
 {
-protected:
-    uint8_t mVal;
 public:
-    Clocks(uint8_t aVal): mVal(aVal){}
-    uint8_t value() const { return mVal; }
+    uint8_t value;
+    ClockCnt(uint8_t aVal): value(aVal){}
+};
+struct NanoTime
+{
+public:
+    uint8_t value;
+    NanoTime(uint8_t aVal): value(aVal){}
 };
 
-template <uint32_t ADC>
-constexpr rcc_periph_clken adcClock();
-
-template <uint32_t ADC>
-struct DmaInfoForAdc;
 
 template<uint32_t ADC>
-class Adc
+class AdcNoDma: public PeriphInfo<ADC>
 {
-public:
-    typedef DmaInfoForAdc<ADC> DmaInfo;
 protected:
     enum { kOptNotInitialized = 0x8000 };
     uint16_t mInitOpts = kOptNotInitialized;
     uint32_t mClockFreq = 0;
     volatile uint8_t mState = 0;
-    uint32_t obtainClockFreq() const
+    uint32_t currentClockFreq() const
     {
         uint32_t code = (RCC_CFGR & RCC_CFGR_ADCPRE) >> RCC_CFGR_ADCPRE_SHIFT;
         return rcc_apb2_frequency / codeToClockRatio(code);
     }
-    enum { dma = DmaInfo::kDmaId };
-    enum { chan = DmaInfo::kDmaChannel };
-    template <typename T>
-    uint8_t sampleNsTimeToCode(T nanosec)
+    uint8_t sampleNanosecToCode(uint32_t nanosec)
     {
-        static_assert(std::is_integral<T>::value, "Time is not numeric");
-        return sampleCyclesToCode(nanosec/(100000000/mClockFreq));
+        return sampleCyclesToCode(nanosec/(1000000000/mClockFreq));
     }
-    template <typename T>
-    uint8_t sampleTimeToCode(T val) { return sampleNsTimeToCode(val); }
-    uint8_t sampleTimeToCode(Clocks clocks) { return clocks.value(); }
+    uint8_t sampleFreqToCode(uint32_t freq)
+    {
+        return sampleCyclesToCode(mClockFreq / freq); //must multiply cycles x10
+    }
+    uint8_t sampleTimeFreqToCode(uint32_t freq) { return sampleFreqToCode(freq); }
+    uint8_t sampleTimeFreqToCode(ClockCnt clocks) { return sampleCyclesToCode(clocks.value()); } //Clock is x10, because it contains .5 units
+    uint8_t sampleTimeFreqToCode(NanoTime nano) { return sampleNanosecToCode(nano.value()); }
+
     void enableVrefAsync()
     {
         static_assert(ADC == ADC1, "ADC device is not ADC1");
@@ -80,40 +85,34 @@ protected:
     }
 public:
     volatile uint8_t state() const { return mState; }
-    template <typename T>
-    void setChanSampleTime(uint8_t chan, T time)
-    {
-        adc_set_sample_time(ADC, chan, sampleTimeToCode(time));
-    }
     uint32_t clockFreq() const { return mClockFreq; }
     bool isInitialized() const { return (mInitOpts & kOptNotInitialized) == 0; }
-    void init(uint8_t opts, uint32_t adcFreq=12000000)
+    void init(uint8_t opts, uint32_t adcClockFreq=12000000)
     {
-        if (adcFreq)
+        assert(adcClockFreq > 0 && adcClockFreq <= 14000000);
+        // calculate rounded ratio - adc is clocked by dividing apb2 clock
+        uint32_t ratio = ((rcc_apb2_frequency << 1) + adcClockFreq) / (adcClockFreq << 1);
+        if (ratio & 1) //must be an even number
         {
-            assert(adcFreq <= 14000000);
-            uint32_t ratio = ((rcc_apb2_frequency << 1) + adcFreq) / (adcFreq << 1);
-            if (ratio & 1) //must be an even number
-                ratio++;
-            int8_t divCode = clockRatioToCode(ratio);
-            if (divCode < 0) //could not find exact match
-            {
-                divCode = -divCode;
-                ratio = codeToClockRatio(divCode);
-            }
-            mClockFreq = rcc_apb2_frequency / ratio;
-            assert(mClockFreq <= adcFreq);
-            rcc_set_adcpre(divCode);
+            ratio++;
         }
-        else
+        int8_t divCode = clockRatioToCode(ratio);
+        if (divCode < 0) //could not find exact match
         {
-            mClockFreq = obtainClockFreq();
+            divCode = -divCode;
+            ratio = codeToClockRatio(divCode);
         }
 
-        rcc_periph_clock_enable(adcClock<ADC>());
+        rcc_periph_clock_enable(PeriphInfo<ADC>::kClockId);
         /* Make sure the ADC doesn't run during config. */
         adc_power_off(ADC);
+        //rcc_periph_reset_pulse(ADC);
+        rcc_set_adcpre(divCode);
+        mClockFreq = currentClockFreq();
+        tprintf("apb: %, req clock: %, ratio: %, mFreq: %\n", rcc_apb2_frequency, adcClockFreq, ratio, mClockFreq);
+
         adc_set_right_aligned(ADC);
+        adc_set_dual_mode(ADC_CR1_DUALMOD_IND);
 
         if (opts & kOptContConv)
         {
@@ -126,7 +125,6 @@ public:
         if (opts & kOptScanMode)
         {
             adc_enable_scan_mode(ADC);
-            assert(opts & kOptUseDma);
         }
         else
         {
@@ -135,85 +133,76 @@ public:
 
         mInitOpts = opts;
         if ((opts & kOptNoVref) == 0)
-            enableVrefAsync();
-
-        adc_power_on(ADC);
-        usDelay((opts & kOptNoVref) ? 3 : 10);
-        if ((opts & kOptNoCalibrate) == 0)
         {
-            adc_reset_calibration(ADC);
-            adc_calibrate(ADC);
+            enableVrefAsync();
         }
-        if (opts & kOptUseDma)
-             dmaInit();
+        usDelay((opts & kOptNoVref) ? 3 : 10);
     }
     void enableExtTrigRegular(uint32_t trig)
     {
         adc_enable_external_trigger_regular(ADC, trig);
     }
     template <class T>
-    void setChannels(uint8_t* chans, uint8_t count, T smpTime)
+    void setChannels(uint8_t* chans, uint8_t count, T timeFreq)
     {
         adc_set_regular_sequence(ADC, count, chans);
-        if (smpTime)
+        uint8_t code = sampleTimeFreqToCode(timeFreq);
+        for (uint8_t i = 0; i < count; i++)
         {
-            uint8_t timeCode = sampleTimeToCode(smpTime);
-            uint32_t reg32 = timeCode;
-            for (uint8_t i = 0; i < 7; i++)
-            {
-                smpTime <<= 3;
-                reg32 |= smpTime;
-            }
-            ADC_SMPR1(ADC) = (ADC_SMPR1(ADC) & 0xf0000000) | reg32;
-            smpTime <<= 3;
-            reg32 |= smpTime;
-            smpTime <<= 3;
-            reg32 |= smpTime;
-            ADC_SMPR2(ADC) = (ADC_SMPR2(ADC) & 0xc0000000) | reg32;
+            adc_set_sample_time(ADC, chans[i], code);
         }
     }
     template <typename T>
-    void setChannels(uint8_t* chans, uint8_t count, T* smpTimes)
+    void setChannels(uint8_t* chans, uint8_t count, T* timeFreqs)
     {
         adc_set_regular_sequence(ADC, count, chans);
         for (uint8_t i = 0; i < count; i++)
-            adc_set_sample_time(ADC, chans[i], sampleTimeToCode(smpTimes[i]));
+        {
+            adc_set_sample_time(ADC, chans[i], sampleTimeFreqToCode(timeFreqs[i]));
+        }
     }
+    /**
+     * Sets the sampling time for a channel. If the time is specified as an
+     * integer, it is treated as nanoseconds. If it is a Clocks value, then
+     * the sample time is set to this number of ADC clocks. The same is valid
+     * for all versions of the setChannel() method
+     */
     template <typename T>
-    void setChannels(uint8_t chan, T smpTime)
+    uint8_t setChanSampleTime(uint8_t chan, T timeFreq)
     {
-        adc_set_sample_time(ADC, chan, sampleTimeToCode(smpTime));
-        setSingleChannel(chan);
+        uint8_t code = sampleTimeFreqToCode(timeFreq);
+        adc_set_sample_time(ADC, chan, code);
+        return code;
     }
+    uint32_t sampleTimeCodeToFreq(uint8_t code)
+    {
+        auto cycles = codeToSampleCycles(code);
+        return mClockFreq / cycles;
+    }
+    uint32_t sampleTimeCodeToNs(uint8_t code)
+    {
+        return (1000000000 / mClockFreq) * codeToSampleCycles(code);
+    }
+    bool isRunning() const { return (ADC_CR2(ADC) & ADC_CR2_ADON) != 0; }
     void start(uint32_t trig=ADC_CR2_EXTSEL_SWSTART)
     {
-        mState = kStateRunning;
-        if ((ADC_CR2(ADC) & ADC_CR2_ADON) == 0)
-        {
-            adc_power_on(ADC);
-            usDelay(3);
-        }
+        assert(!isRunning());
         adc_enable_external_trigger_regular(ADC, trig);
+        adc_power_on(ADC);
+        //at least 2 clock cycles after power on, before calibration
+        uint32_t dly = 4000000000 / mClockFreq;
+        usDelay(dly);
+        adc_reset_calibration(ADC);
+        adc_calibrate(ADC);
+        usDelay(dly);
         if (trig == ADC_CR2_EXTSEL_SWSTART)
+        {
             adc_start_conversion_regular(ADC);
-    }
-    void start(void* buf, size_t bufsize, uint32_t trig=ADC_CR2_EXTSEL_SWSTART)
-    {
-        assert(mInitOpts & kOptUseDma);
-        dmaStart(buf, bufsize);
-        start(trig);
+        }
     }
     void stop()
     {
         adc_power_off(ADC);
-        mState &= ~kStateRunning;
-    }
-    void dmaCompleteIsr()
-    {
-        DMA_IFCR(dma) |= DMA_IFCR_CTCIF(chan);
-        stop();
-        dmaStop();
-        mState |= kStateDataReady;
     }
     void enableVref()
     {
@@ -222,63 +211,18 @@ public:
     }
     void disableVref() { adc_disable_temperature_sensor(); }
 protected:
-    void dmaInit()
+    void dmaStartPeripheralRx(uint32_t trig=ADC_CR2_EXTSEL_SWSTART)
     {
-        if ((mInitOpts & kOptDmaDontEnableClock) == 0)
-        {
-            rcc_periph_clock_enable(DmaInfo::clock());
-        }
-
-        dma_channel_reset(dma, chan);
-        // Set mode: High priority, read from peripheral
-        if (mInitOpts & kOptDmaCircular)
-        {
-            dma_enable_circular_mode(dma, chan);
-        }
-        else
-        {
-            if ((mInitOpts & kOptDmaNoDoneIntr) == 0) // Interrupt when transfer complete
-            {
-                dma_enable_transfer_complete_interrupt(dma, chan);
-            }
-        }
-        dma_set_priority(dma, chan, DMA_CCR_PL_VERY_HIGH);
-        dma_set_read_from_peripheral(dma, chan);
-        dma_set_peripheral_address(dma, chan, (uint32_t)(&ADC_DR(ADC)));
-        dma_set_peripheral_size(dma, chan, DMA_CCR_PSIZE_16BIT);
-        dma_set_memory_size(dma, chan, DMA_CCR_MSIZE_16BIT);
-
-        // Set increment mode
-        dma_disable_peripheral_increment_mode(dma, chan);
-        dma_enable_memory_increment_mode(dma, chan);
-        if ((mInitOpts & kOptDmaDontEnableIrq) == 0)
-        {
-            nvic_set_priority(DmaInfo::kIrqNo, 0);
-            nvic_enable_irq(DmaInfo::kIrqNo);
-        }
-    }
-    void dmaStart(void* buf, size_t bufsize)
-    {
-        assert((bufsize & 1) == 0);
-        assert((DMA_CCR(dma, chan) & DMA_CCR_EN) == 0);
-        dma_set_number_of_data(dma, chan, bufsize/2);
-        dma_set_memory_address(dma, chan, (uint32_t)buf);
-        // Enable DMA channel
-        dma_enable_transfer_complete_interrupt(dma, chan);
-        dma_enable_channel(dma, chan);
         adc_enable_dma(ADC);
+        start(trig);
     }
-    void dmaStop()
+    void dmaStopPeripheralRx()
     {
-        dma_disable_transfer_complete_interrupt(dma, chan);
+        stop();
         adc_disable_dma(ADC);
-        dma_disable_channel(dma, chan);
+        mState |= kStateDataReady;
     }
 public:
-    bool dmaBusy()
-    {
-        return (DMA_CCR(dma, chan) & DMA_CCR_EN);
-    }
     int8_t clockRatioToCode(uint32_t ratio)
     {
         switch (ratio)
@@ -301,36 +245,60 @@ public:
         default: assert(false); return 0; //silence no return warning
         }
     }
-    static uint8_t sampleCyclesToCode(uint16_t cyclesx10)
+    static uint8_t sampleCyclesToCode(int16_t cycles)
     {
-        if (cyclesx10 <= 15)
+        // Total conversion time = sample_time + 12.5 cycles
+        // sample_time is what we set in the register, and cycles is the
+        // total conversion time
+        cycles = (cycles * 10) - 125;
+        if (cycles <= 15)
             return ADC_SMPR_SMP_1DOT5CYC;
-        else if (cyclesx10 <= 75)
+        else if (cycles <= 75)
             return ADC_SMPR_SMP_7DOT5CYC;
-        else if (cyclesx10 <= 135)
+        else if (cycles <= 135)
             return ADC_SMPR_SMP_13DOT5CYC;
-        else if (cyclesx10 <= 285)
+        else if (cycles <= 285)
             return ADC_SMPR_SMP_28DOT5CYC;
-        else if (cyclesx10 <= 415)
+        else if (cycles <= 415)
             return ADC_SMPR_SMP_41DOT5CYC;
-        else if (cyclesx10 <= 555)
+        else if (cycles <= 555)
             return ADC_SMPR_SMP_55DOT5CYC;
-        else if (cyclesx10 <= 715)
+        else if (cycles <= 715)
             return ADC_SMPR_SMP_71DOT5CYC;
         else
             return ADC_SMPR_SMP_239DOT5CYC;
     }
-    void setSingleChannel(uint8_t chan)
+    static uint16_t codeToSampleCycles(uint8_t code)
+    {
+        // total sample cycles are sample_time + 12.5
+        switch (code)
+        {
+            case ADC_SMPR_SMP_1DOT5CYC: return 14;
+            case ADC_SMPR_SMP_7DOT5CYC: return 20;
+            case ADC_SMPR_SMP_13DOT5CYC: return 26;
+            case ADC_SMPR_SMP_28DOT5CYC: return 41;
+            case ADC_SMPR_SMP_41DOT5CYC: return 54;
+            case ADC_SMPR_SMP_55DOT5CYC: return 68;
+            case ADC_SMPR_SMP_71DOT5CYC: return 84;
+            case ADC_SMPR_SMP_239DOT5CYC: return 252;
+            default: __builtin_trap();
+        }
+    }
+    template<class T>
+    uint8_t useSingleChannel(uint8_t chan, T timeFreq)
     {
         assert(chan < 18);
-        ADC_SQR1(ADC) = (ADC_SQR1(ADC) & ~ADC_SQR1_L_MSK) | (1 << ADC_SQR1_L_LSB);
-        ADC_SQR3(ADC) = chan;
+        uint8_t code = sampleTimeFreqToCode(timeFreq);
+        adc_set_regular_sequence(ADC, 1, &code);
+//        ADC_SQR1(ADC) = (ADC_SQR1(ADC) & ~ADC_SQR1_L_MSK) | (1 << ADC_SQR1_L_LSB);
+//        ADC_SQR3(ADC) = chan;
+        return code;
     }
     uint16_t convertSingle(uint8_t channel)
     {
         assert(isInitialized() &&
                ((mInitOpts & (kOptContConv|kOptScanMode)) == 0));
-        setSingleChannel(channel);
+        useSingleChannel(channel);
         adc_start_conversion_direct(ADC);
         /* Wait for end of conversion. */
         while (!(adc_eoc(ADC)));
@@ -338,29 +306,9 @@ public:
     }
 };
 
-template <>
-constexpr rcc_periph_clken adcClock<ADC1>() { return RCC_ADC1; }
-template <>
-constexpr rcc_periph_clken adcClock<ADC2>() { return RCC_ADC2; }
 
-template<>
-struct DmaInfoForAdc<ADC1>
-{
-    enum: uint32_t { kDmaId = DMA1 };
-    enum: uint8_t { kDmaChannel = DMA_CHANNEL1 };
-    enum: uint8_t { kIrqNo = NVIC_DMA1_CHANNEL1_IRQ };
-    static constexpr rcc_periph_clken clock() { return RCC_DMA1; }
-};
-template<>
-struct DmaInfoForAdc<ADC3>
-{
-    enum: uint32_t { kDmaId = DMA2 };
-    enum: uint8_t { kDmaChannel = DMA_CHANNEL5 };
-    enum: uint8_t { kIrqNo = NVIC_DMA2_CHANNEL5_IRQ };
-    static constexpr rcc_periph_clken clock() { return RCC_DMA2; }
-};
 
-/** @brief CLock setup for maximum ADC sample rate of 1 MHz.
+/** @brief Clock setup for maximum ADC sample rate of 1 MHz.
  *  Based on libopencm3 clock setup function for CPU clock at 72 MHz
  */
 void rcc_clock_setup_in_hse_8mhz_out_56mhz()
@@ -422,5 +370,34 @@ void rcc_clock_setup_in_hse_8mhz_out_56mhz()
     rcc_apb1_frequency = 28000000;
     rcc_apb2_frequency = 56000000;
 }
+
+template <uint32_t ADC>
+class Adc: public dma::Rx<AdcNoDma<ADC>, dma::kAllMaxPrio>
+{
+};
 }
+
+template<>
+struct PeriphInfo<ADC1>
+{
+    static constexpr rcc_periph_clken kClockId = RCC_ADC1;
+    enum: uint32_t { kResetBit = RST_ADC1, kDmaRxId = DMA1, kDmaRxDataRegister = (uint32_t)(&ADC1_DR) };
+    enum: uint8_t { kDmaRxChannel = DMA_CHANNEL1, kDmaWordSize = 16 };
+};
+template<>
+struct PeriphInfo<ADC2>
+{
+    static constexpr rcc_periph_clken kClockId = RCC_ADC2;
+    enum { kResetBit = RST_ADC2 };
+    // ADC2 has no own DMA support.
+};
+
+template<>
+struct PeriphInfo<ADC3>
+{
+    static constexpr rcc_periph_clken kClockId = RCC_ADC3;
+    enum: uint32_t { kResetBit = RST_ADC3, kDmaRxId = DMA2, kDmaRxDataRegister = (uint32_t)(&ADC3_DR) };
+    enum: uint8_t { kDmaRxChannel = DMA_CHANNEL5 };
+};
+
 #endif

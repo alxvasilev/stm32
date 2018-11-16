@@ -13,14 +13,6 @@
 #include <stm32++/dma.hpp>
 namespace dma
 {
-template<> struct DmaInfo<I2C1>: public PeriphDmaInfo<I2C1, DMA1, 6, 7, 8>
-{
-    static constexpr uint32_t dataRegister() { return (uint32_t)(&I2C1_DR); }
-};
-template<> struct DmaInfo<I2C2>: public PeriphDmaInfo<I2C2, DMA1, 4, 5, 8>
-{
-    static constexpr uint32_t dataRegister() { return (uint32_t)&I2C2_DR; }
-};
 }
 
 namespace nsi2c
@@ -33,15 +25,11 @@ enum { kTimeoutMs = 10 };
 /* Private defines */
 enum: bool { kTxMode = true, kRxMode = false,
              kAckEnable = true, kAckDisable = false };
-template<uint32_t I2C>
-struct I2CInfo;
 
 template <uint32_t I2C>
-class I2c: public I2CInfo<I2C>
+class I2c: public PeriphInfo<I2C>
 {
 public:
-    enum: uint32_t { periphId = I2C };
-    enum: bool { hasTxDma = false, hasRxDma = false };
     void init(bool fastMode=true, uint8_t ownAddr=0x15)
     {
         rcc_periph_clock_enable(RCC_GPIOB);
@@ -50,7 +38,7 @@ public:
                       GPIO_CNF_OUTPUT_ALTFN_OPENDRAIN,
                       this->kPinSda | this->kPinScl);
 
-        rcc_periph_clock_enable(this->clock());
+        rcc_periph_clock_enable(this->kClockId);
         i2c_reset(I2C);
         /* Disable the I2C before changing any configuration. */
         i2c_peripheral_disable(I2C);
@@ -326,42 +314,72 @@ uint8_t findFirstDevice(uint8_t from=0)
             return i;
     return 0xff;
 }
+void dmaStartPeripheralTx() { i2c_enable_dma(I2C); }
+void dmaStartPeripheralRx() { i2c_enable_dma(I2C); }
+//WARNING: The dmaStopPerpheralXX can be called from an ISR
+void dmaStopPeripheralTx()
+{
+    i2c_disable_dma(I2C);
+    this->stop();
+}
+void dmaStopPeripheralRx()
+{
+    i2c_disable_dma(I2C);
+    this->stop();
+}
 };
 
-template<>
-struct I2CInfo<I2C1>
-{
-    enum: uint16_t { kPinScl = GPIO_I2C1_SCL, kPinSda = GPIO_I2C1_SDA };
-    static constexpr rcc_periph_clken clock() { return RCC_I2C1; }
-};
-template<>
-struct I2CInfo<I2C2>
-{
-    enum: uint16_t { kPinScl = GPIO_I2C2_SCL, kPinSda = GPIO_I2C2_SDA };
-    static constexpr rcc_periph_clken clock() { return RCC_I2C2; }
-};
-
-template<uint32_t I2C, uint8_t Opts=dma::kDefaultOpts>
-class I2cDma: public dma::Tx<I2c<I2C>, I2cDma<I2C, Opts>, Opts>
+template<class T, uint8_t Opts=dma::kDefaultOpts>
+class I2cDmaTx: public dma::Tx<T, Opts>
 {
 protected:
-    typedef dma::Tx<I2c<I2C>, I2cDma<I2C, Opts>, Opts> Base;
+    typedef dma::Tx<T, Opts> Base;
 public:
     void init(bool fastMode=true, uint8_t ownAddr=0x15)
     {
         Base::init(fastMode, ownAddr);
         this->dmaTxInit();
     }
-    enum: bool { hasTxDma = true, hasRxDma = false };
     typedef void(*FreeFunc)(void*);
-    using I2c<I2C>::I2c;
-    void dmaStartPeripheralTx() { i2c_enable_dma(I2C); }
-    void dmaStopPeripheralTx()
+};
+
+template<class T, uint8_t Opts=dma::kDefaultOpts>
+class I2cDmaRx: public dma::Rx<T, Opts>
+{
+protected:
+    typedef dma::Rx<T, Opts> Base;
+public:
+    void init(bool fastMode=true, uint8_t ownAddr=0x15)
     {
-    //WARNING: This can be called from an ISR
-        i2c_disable_dma(I2C);
-        this->stop();
+        Base::init(fastMode, ownAddr);
+        this->dmaRxInit();
     }
 };
 
 }
+template<>
+struct PeriphInfo<I2C1>
+{
+    enum: uint16_t { kPinScl = GPIO_I2C1_SCL, kPinSda = GPIO_I2C1_SDA };
+    static constexpr rcc_periph_clken kClockId = RCC_I2C1;
+    enum: uint32_t { kDmaTxId = DMA1, kDmaRxId = DMA1 };
+    enum: uint8_t {
+        kDmaTxChannel = DMA_CHANNEL6,
+        kDmaRxChannel = DMA_CHANNEL7,
+        kDmaWordSize = 8
+    };
+    static constexpr uint32_t dataRegister() { return (uint32_t)(&I2C1_DR); }
+};
+template<>
+struct PeriphInfo<I2C2>
+{
+    enum: uint16_t { kPinScl = GPIO_I2C2_SCL, kPinSda = GPIO_I2C2_SDA };
+    static constexpr rcc_periph_clken kClockId = RCC_I2C2;
+    enum: uint32_t { kDmaTxId = DMA1, kDmaRxId = DMA1 };
+    enum: uint8_t {
+        kDmaTxChannel = DMA_CHANNEL4,
+        kDmaRxChannel = DMA_CHANNEL5,
+        kDmaWordSize = 8
+    };
+    static constexpr uint32_t dataRegister() { return (uint32_t)(&I2C2_DR); }
+};

@@ -26,6 +26,7 @@
 #include <libopencm3/stm32/i2c.h>
 #include <stm32++/timeutl.hpp>
 #include <stm32++/font.hpp>
+#include <stm32++/common.hpp>
 #include <string.h>
 
 #define SSD1306_SETCONTRAST 0x81
@@ -103,6 +104,7 @@ protected:
     uint16_t mCurrentX;
     uint16_t mCurrentY;
     uint8_t mState = kFontHspace2;
+    Color mColor = kColorWhite;
     uint8_t mAddr;
     constexpr static uint16_t mkType(uint8_t w, uint8_t h) { return (w << 8) | h; }
 public:
@@ -113,6 +115,8 @@ public:
         SSD1306_96_16 = mkType(96,16)
     };
     uint8_t* rawBuf() { return mBuf; }
+    void setDrawColor(Color aColor) { mColor = aColor; }
+    Color drawColor() const { return mColor; }
     bool isInverted() const { return mState & kStateInverted; }
     SSD1306(IO& intf, uint8_t addr=0x3C): mIo(intf), mAddr(addr) {}
     bool init()
@@ -181,9 +185,9 @@ public:
 
         mIo.startSend(mAddr, false);
         mIo.sendByte(0x40);
-        if (mIo.hasTxDma)
+        if (HasTxDma<decltype(mIo)>::value)
         {
-            mIo.dmaSend(mBuf, W*H/8, nullptr);
+            mIo.dmaSend(mBuf, sizeof(mBuf), nullptr);
         }
         else
         {
@@ -194,6 +198,7 @@ public:
     template <class... Args>
     void cmd(Args... args)
     {
+        while (mIo.txBusy());
         mIo.startSend(mAddr);
         mIo.sendByte(0);
         mIo.sendByte(args...);
@@ -202,16 +207,16 @@ public:
 
 void toggleInvert(void)
 {
-    if (mState & kStateInverted)
-        mState &= ~kStateInverted;
+    if (mColor)
+        mColor = kColorBlack;
     else
-        mState |= kStateInverted;
+        mColor = kColorWhite;
 
     /* Do memory toggle */
-    for (int i = 0; i < sizeof(mBuf); i++)
+    size_t* bufEnd = static_cast<size_t*>(mBuf + sizeof(mBuf));
+    for (size_t* ptr = mBuf; ptr < bufEnd; ptr++)
     {
-        auto& byte = mBuf[i];
-        byte = ~byte;
+        *ptr = ~*ptr;
     }
 }
 
@@ -221,7 +226,7 @@ void fill(Color color)
     memset(mBuf, (color == kColorBlack) ? 0x00 : 0xFF, sizeof(mBuf));
 }
 
-void setPixel(uint16_t x, uint16_t y, uint8_t color)
+void setPixel(uint16_t x, uint16_t y)
 {
     if (x >= W || y >= H) {
         /* Error */
@@ -229,16 +234,11 @@ void setPixel(uint16_t x, uint16_t y, uint8_t color)
         return;
     }
 
-    /* Check if pixels are inverted */
-    if (isInverted()) {
-        color = !color;
-    }
-
     /* Set color */
-    if (color == kColorWhite) {
-        mBuf[x + (y / 8) * W] |= 1 << (y % 8);
+    if (mColor) {
+        mBuf[x + (y >> 3) * W] |= 1 << (y % 8);
     } else {
-        mBuf[x + (y / 8) * W] &= ~(1 << (y % 8));
+        mBuf[x + (y >> 3) * W] &= ~(1 << (y % 8));
     }
 }
 
@@ -249,12 +249,8 @@ void gotoXY(uint16_t x, uint16_t y)
     mCurrentY = y;
 }
 
-uint8_t putc(char ch, const Font& font, Color color = kColorWhite)
+uint8_t putc(char ch, const Font& font)
 {
-    if (isInverted())
-    {
-        color = (Color)!color;
-    }
     uint8_t fontW = font.width;
     uint8_t symPages = (font.height+7)/8;
     uint8_t symLastPage = symPages - 1;
@@ -288,7 +284,7 @@ uint8_t putc(char ch, const Font& font, Color color = kColorWhite)
 
             for (; src < srcEnd; src++, dest++)
             {
-                *dest = (*dest & ~wmask) | ((color ? (*src) : (~*src)) & wmask);
+                *dest = (*dest & ~wmask) | ((mColor ? (*src) : (~*src)) & wmask);
             }
         }
     }
@@ -303,7 +299,7 @@ uint8_t putc(char ch, const Font& font, Color color = kColorWhite)
         uint8_t* wptr = bufDest; //write pointer
         uint8_t* wend = wptr+writeWidth;
         const uint8_t* rptr = sym; //read pointer
-        if (color)
+        if (mColor)
         {
             while(wptr < wend)
             {
@@ -357,7 +353,7 @@ uint8_t putc(char ch, const Font& font, Color color = kColorWhite)
                 {
                     // we are drawing the bottom part of the symbol page,
                     // to the top part of the next display page.
-                    uint8_t srcByte = color
+                    uint8_t srcByte = mColor
                         ? (*(rptr++) >> displayFirstPageHeight)
                         : ((~*(rptr++)) >> displayFirstPageHeight);
                     wmask = (rpage < symLastPage)
@@ -373,7 +369,7 @@ uint8_t putc(char ch, const Font& font, Color color = kColorWhite)
                     wmask = (rpage < symLastPage)
                        ? firstLineFullMask // not the last symbol page, so copy all 8 bits
                        : symLastPageToFirstDisplayPageMask; //the last symbol page
-                    uint8_t srcByte = color
+                    uint8_t srcByte = mColor
                         ? ((*(rptr++) << vOfs))
                         : ((~*(rptr++) << vOfs));
                     b = (b & ~wmask) | srcByte;
@@ -390,12 +386,12 @@ uint8_t putc(char ch, const Font& font, Color color = kColorWhite)
 }
 
 template <class F>
-bool puts(const char* str, const F& font, Color color=kColorWhite)
+bool puts(const char* str, const F& font)
 {
     while (*str)
     {
         /* Write character by character */
-        auto writeWidth = putc(*str, font, color);
+        auto writeWidth = putc(*str, font);
         if (!writeWidth) {
             return false;
         }
@@ -405,7 +401,7 @@ bool puts(const char* str, const F& font, Color color=kColorWhite)
     return true;
 }
 
-void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint8_t c)
+void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 {
     int16_t dx, dy, sx, sy, err, e2, i, tmp;
 
@@ -444,7 +440,7 @@ void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint8_t c)
 
         /* Vertical line */
         for (i = y0; i <= y1; i++) {
-            setPixel(x0, i, c);
+            setPixel(x0, i);
         }
 
         /* Return from function */
@@ -466,7 +462,7 @@ void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint8_t c)
 
         /* Horizontal line */
         for (i = x0; i <= x1; i++) {
-            setPixel(i, y0, c);
+            setPixel(i, y0);
         }
 
         /* Return from function */
@@ -474,7 +470,7 @@ void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint8_t c)
     }
 
     while (1) {
-        setPixel(x0, y0, c);
+        setPixel(x0, y0);
         if (x0 == x1 && y0 == y1) {
             break;
         }
@@ -516,7 +512,7 @@ void drawRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t c)
     drawLine(x + w, y, x + w, y + h, c); /* Right line */
 }
 
-void drawFilledRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t c)
+void drawFilledRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 {
     uint8_t i;
 
@@ -540,7 +536,7 @@ void drawFilledRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t
     /* Draw lines */
     for (i = 0; i <= h; i++) {
         /* Draw lines */
-        drawLine(x, y + i, x + w, y + i, c);
+        drawLine(x, y + i, x + w, y + i);
     }
 }
 
@@ -653,11 +649,11 @@ void drawFilledCircle(int16_t x0, int16_t y0, int16_t r, uint8_t c)
     int16_t x = 0;
     int16_t y = r;
 
-    setPixel(x0, y0 + r, c);
-    setPixel(x0, y0 - r, c);
-    setPixel(x0 + r, y0, c);
-    setPixel(x0 - r, y0, c);
-    drawLine(x0 - r, y0, x0 + r, y0, c);
+    setPixel(x0, y0 + r);
+    setPixel(x0, y0 - r);
+    setPixel(x0 + r, y0);
+    setPixel(x0 - r, y0);
+    drawLine(x0 - r, y0, x0 + r, y0);
 
     while (x < y) {
         if (f >= 0) {
@@ -669,11 +665,11 @@ void drawFilledCircle(int16_t x0, int16_t y0, int16_t r, uint8_t c)
         ddF_x += 2;
         f += ddF_x;
 
-        drawLine(x0 - x, y0 + y, x0 + x, y0 + y, c);
-        drawLine(x0 + x, y0 - y, x0 - x, y0 - y, c);
+        drawLine(x0 - x, y0 + y, x0 + x, y0 + y);
+        drawLine(x0 + x, y0 - y, x0 - x, y0 - y);
 
-        drawLine(x0 + y, y0 + x, x0 - y, y0 + x, c);
-        drawLine(x0 + y, y0 - x, x0 - y, y0 - x, c);
+        drawLine(x0 + y, y0 + x, x0 - y, y0 + x);
+        drawLine(x0 + y, y0 - x, x0 - y, y0 - x);
     }
 }
 void powerOn()
