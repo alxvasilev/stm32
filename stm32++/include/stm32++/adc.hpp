@@ -21,6 +21,13 @@
 #include <stm32++/common.hpp>
 #include <assert.h>
 
+#define ADC_ENABLE_DEBUG
+#ifdef ADC_ENABLE_DEBUG
+#define ADC_LOG_DEBUG(fmt,...) tprintf("adc: " fmt "\n", ##__VA_ARGS__)
+#else
+#define ADC_LOG_DEBUG(fmt,...)
+#endif
+
 namespace nsadc
 {
 enum: uint16_t {
@@ -33,7 +40,6 @@ enum: uint16_t {
     kOptNoCalibrate = 256
 };
 
-enum: uint8_t { kStateDataReady = 1 };
 // To differentiate the type of value when passing to setChannels()
 struct ClockCnt
 {
@@ -53,10 +59,10 @@ template<uint32_t ADC>
 class AdcNoDma: public PeriphInfo<ADC>
 {
 protected:
+    typedef AdcNoDma<ADC> Self;
     enum { kOptNotInitialized = 0x8000 };
     uint16_t mInitOpts = kOptNotInitialized;
     uint32_t mClockFreq = 0;
-    volatile uint8_t mState = 0;
     uint32_t currentClockFreq() const
     {
         uint32_t code = (RCC_CFGR & RCC_CFGR_ADCPRE) >> RCC_CFGR_ADCPRE_SHIFT;
@@ -82,9 +88,9 @@ protected:
         //17100 nanoseconds sample time required for temperature sensor
         setChanSampleTime(ADC_CHANNEL_TEMP, 18000);
         setChanSampleTime(ADC_CHANNEL_VREF, 18000);
+        ADC_LOG_DEBUG("Enabled reference and temperature channels");
     }
 public:
-    volatile uint8_t state() const { return mState; }
     uint32_t clockFreq() const { return mClockFreq; }
     bool isInitialized() const { return (mInitOpts & kOptNotInitialized) == 0; }
     void init(uint8_t opts, uint32_t adcClockFreq=12000000)
@@ -103,13 +109,14 @@ public:
             ratio = codeToClockRatio(divCode);
         }
 
-        rcc_periph_clock_enable(PeriphInfo<ADC>::kClockId);
+        rcc_periph_clock_enable(Self::kClockId);
         /* Make sure the ADC doesn't run during config. */
         adc_power_off(ADC);
-        //rcc_periph_reset_pulse(ADC);
+        rcc_periph_reset_pulse(Self::kResetBit);
+        usDelay(10); //debug
         rcc_set_adcpre(divCode);
         mClockFreq = currentClockFreq();
-        tprintf("apb: %, req clock: %, ratio: %, mFreq: %\n", rcc_apb2_frequency, adcClockFreq, ratio, mClockFreq);
+        ADC_LOG_DEBUG("init with opts = %, requested clock: %Hz, actual clock: = %Hz", opts, adcClockFreq, mClockFreq);
 
         adc_set_right_aligned(ADC);
         adc_set_dual_mode(ADC_CR1_DUALMOD_IND);
@@ -117,18 +124,23 @@ public:
         if (opts & kOptContConv)
         {
             adc_set_continuous_conversion_mode(ADC);
+            ADC_LOG_DEBUG("Set continuous conversion mode");
         }
         else
         {
             adc_set_single_conversion_mode(ADC);
+            ADC_LOG_DEBUG("Set single conversion mode");
         }
         if (opts & kOptScanMode)
         {
             adc_enable_scan_mode(ADC);
+            ADC_LOG_DEBUG("Set scan mode");
+
         }
         else
         {
             adc_disable_scan_mode(ADC);
+            ADC_LOG_DEBUG("Disabled scan mode");
         }
 
         mInitOpts = opts;
@@ -197,6 +209,7 @@ public:
         usDelay(dly);
         if (trig == ADC_CR2_EXTSEL_SWSTART)
         {
+            ADC_LOG_DEBUG("Starting conversion by software");
             adc_start_conversion_regular(ADC);
         }
     }
@@ -209,18 +222,22 @@ public:
         enableVrefAsync();
         usDelay(10);
     }
-    void disableVref() { adc_disable_temperature_sensor(); }
+    void disableVref()
+    {
+        adc_disable_temperature_sensor();
+        ADC_LOG_DEBUG("Disabled reference and temperature channels");
+    }
 protected:
     void dmaStartPeripheralRx(uint32_t trig=ADC_CR2_EXTSEL_SWSTART)
     {
         adc_enable_dma(ADC);
+        ADC_LOG_DEBUG("Enabled DMA");
         start(trig);
     }
     void dmaStopPeripheralRx()
     {
         stop();
         adc_disable_dma(ADC);
-        mState |= kStateDataReady;
     }
 public:
     int8_t clockRatioToCode(uint32_t ratio)
@@ -290,8 +307,10 @@ public:
         assert(chan < 18);
         uint8_t code = sampleTimeFreqToCode(timeFreq);
         adc_set_regular_sequence(ADC, 1, &code);
-//        ADC_SQR1(ADC) = (ADC_SQR1(ADC) & ~ADC_SQR1_L_MSK) | (1 << ADC_SQR1_L_LSB);
-//        ADC_SQR3(ADC) = chan;
+//      ADC_SQR1(ADC) = (ADC_SQR1(ADC) & ~ADC_SQR1_L_MSK) | (1 << ADC_SQR1_L_LSB);
+//      ADC_SQR3(ADC) = chan;
+        ADC_LOG_DEBUG("useSingleChannel: chan %, sample freq: %Hz (%ns, code: %)",
+            chan, sampleTimeCodeToFreq(code), sampleTimeCodeToNs(code), code);
         return code;
     }
     uint16_t convertSingle(uint8_t channel)
@@ -381,14 +400,15 @@ template<>
 struct PeriphInfo<ADC1>
 {
     static constexpr rcc_periph_clken kClockId = RCC_ADC1;
-    enum: uint32_t { kResetBit = RST_ADC1, kDmaRxId = DMA1, kDmaRxDataRegister = (uint32_t)(&ADC1_DR) };
+    enum: uint32_t { kDmaRxId = DMA1, kDmaRxDataRegister = (uint32_t)(&ADC1_DR) };
     enum: uint8_t { kDmaRxChannel = DMA_CHANNEL1, kDmaWordSize = 16 };
+    static constexpr rcc_periph_rst kResetBit = RST_ADC1;
 };
 template<>
 struct PeriphInfo<ADC2>
 {
     static constexpr rcc_periph_clken kClockId = RCC_ADC2;
-    enum { kResetBit = RST_ADC2 };
+    static constexpr rcc_periph_rst kResetBit = RST_ADC2;
     // ADC2 has no own DMA support.
 };
 
@@ -396,8 +416,9 @@ template<>
 struct PeriphInfo<ADC3>
 {
     static constexpr rcc_periph_clken kClockId = RCC_ADC3;
-    enum: uint32_t { kResetBit = RST_ADC3, kDmaRxId = DMA2, kDmaRxDataRegister = (uint32_t)(&ADC3_DR) };
+    enum: uint32_t { kDmaRxId = DMA2, kDmaRxDataRegister = (uint32_t)(&ADC3_DR) };
     enum: uint8_t { kDmaRxChannel = DMA_CHANNEL5 };
+    static constexpr rcc_periph_rst kResetBit = RST_ADC3;
 };
 
 #endif
