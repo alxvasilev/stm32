@@ -328,34 +328,6 @@ void dmaStopPeripheralRx()
     this->stop();
 }
 };
-
-template<class T, uint8_t Opts=dma::kDefaultOpts>
-class I2cDmaTx: public dma::Tx<T, Opts>
-{
-protected:
-    typedef dma::Tx<T, Opts> Base;
-public:
-    void init(bool fastMode=true, uint8_t ownAddr=0x15)
-    {
-        Base::init(fastMode, ownAddr);
-        this->dmaTxInit();
-    }
-    typedef void(*FreeFunc)(void*);
-};
-
-template<class T, uint8_t Opts=dma::kDefaultOpts>
-class I2cDmaRx: public dma::Rx<T, Opts>
-{
-protected:
-    typedef dma::Rx<T, Opts> Base;
-public:
-    void init(bool fastMode=true, uint8_t ownAddr=0x15)
-    {
-        Base::init(fastMode, ownAddr);
-        this->dmaRxInit();
-    }
-};
-
 }
 template<>
 struct PeriphInfo<I2C1>

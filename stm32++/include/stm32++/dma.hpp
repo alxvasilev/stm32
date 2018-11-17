@@ -80,11 +80,11 @@ protected:
     enum: uint8_t { kDmaTxIrq = Self::dmaIrqForChannel(Base::kDmaTxChannel) };
 public:
     template <typename... Args>
-    void dmaTxInit(Args... args)
+    void init(Args... args)
     {
         Base::init(args...);
         DMA_LOG_DEBUG("Initializing %, channel %, irq % for Tx with opts: %",
-            Self::deviceName(), Base::kDmaTxChannel, kDmaTxIrq, fmtHex(Opts));
+            Self::deviceName(), (int)Base::kDmaTxChannel, (int)kDmaTxIrq, fmtHex(Opts));
         nvic_set_priority(kDmaTxIrq, (Opts & kIrqPrioMask) >> kIrqPrioShift);
         nvic_enable_irq(kDmaTxIrq);
         if ((Opts & kDmaDontEnableClock) == 0)
@@ -107,7 +107,7 @@ public:
     void dmaTxStart(const void* data, uint16_t size, FreeFunc freeFunc, Args... args)
     {
         enum: uint8_t { chan = Self::kDmaTxChannel };
-        enum: uint32_t { dma = Self::dmaId };
+        enum: uint32_t { dma = Self::kDmaTxId };
         while(mTxBusy);
         mTxBusy = true;
         mTxBuf = data;
@@ -275,7 +275,7 @@ struct PeriphInfo<DMA2>
         }
     }
 };
-TYPE_SUPPORTS(HasTxDma, T::dmaTxStop);
-TYPE_SUPPORTS(HasRxDma, T::dmaRxStop);
+TYPE_SUPPORTS(HasTxDma, &std::remove_reference<T>::type::dmaTxStop);
+TYPE_SUPPORTS(HasRxDma, &std::remove_reference<T>::type::dmaRxStop);
 
 #endif // DMA_HPP

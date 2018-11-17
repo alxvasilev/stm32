@@ -10,11 +10,10 @@ template <uint32_t id>
 struct PeriphInfo;
 
 // Define a class to check whether a class has a member
-#define TYPE_SUPPORTS(ClassName, Expr)                         \
-    template <typename T, typename = int>                      \
-    struct ClassName: std::false_type { };                     \
-                                                               \
-    template <typename T>                                      \
-    struct ClassName<T, decltype((Expr), 0)> : std::true_type { };
-
+#define TYPE_SUPPORTS(ClassName, Expr)                                 \
+template <typename C> struct ClassName {                               \
+    template <typename T> static uint16_t check(decltype(Expr));       \
+    template <typename> static uint8_t check(...);                     \
+    static bool const value = sizeof(check<C>(0)) == sizeof(uint16_t); \
+};
 #endif // COMMON_HPP

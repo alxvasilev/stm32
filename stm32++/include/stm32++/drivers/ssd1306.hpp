@@ -187,7 +187,7 @@ public:
         mIo.sendByte(0x40);
         if (HasTxDma<decltype(mIo)>::value)
         {
-            mIo.dmaSend(mBuf, sizeof(mBuf), nullptr);
+            mIo.dmaTxStart(mBuf, sizeof(mBuf), nullptr);
         }
         else
         {
