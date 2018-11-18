@@ -33,11 +33,8 @@ namespace nsadc
 enum: uint16_t {
     kOptScanMode = 1,
     kOptContConv = 2,
-    kOptDmaDontEnableClock = 8,
-    kOptDmaCircular = 16, kOptDmaNoDoneIntr = 32,
-    kOptDmaDontEnableIrq = 64,
-    kOptNoVref = 128,
-    kOptNoCalibrate = 256
+    kOptNoVref = 4,
+    kOptNoCalibrate = 8
 };
 
 // To differentiate the type of value when passing to setChannels()
@@ -108,12 +105,11 @@ public:
             divCode = -divCode;
             ratio = codeToClockRatio(divCode);
         }
-
         rcc_periph_clock_enable(Self::kClockId);
+
         /* Make sure the ADC doesn't run during config. */
         adc_power_off(ADC);
         rcc_periph_reset_pulse(Self::kResetBit);
-        usDelay(10); //debug
         rcc_set_adcpre(divCode);
         mClockFreq = currentClockFreq();
         ADC_LOG_DEBUG("init with opts = %, requested clock: %Hz, actual clock: = %Hz", opts, adcClockFreq, mClockFreq);
@@ -143,7 +139,7 @@ public:
             ADC_LOG_DEBUG("Disabled scan mode");
         }
 
-        mInitOpts = opts;
+        mInitOpts = opts & ~kOptNotInitialized;
         if ((opts & kOptNoVref) == 0)
         {
             enableVrefAsync();
@@ -196,7 +192,7 @@ public:
         return (1000000000 / mClockFreq) * codeToSampleCycles(code);
     }
     bool isRunning() const { return (ADC_CR2(ADC) & ADC_CR2_ADON) != 0; }
-    void start(uint32_t trig=ADC_CR2_EXTSEL_SWSTART)
+    void powerOn(uint32_t trig=ADC_CR2_EXTSEL_SWSTART)
     {
         assert(!isRunning());
         adc_enable_external_trigger_regular(ADC, trig);
@@ -207,13 +203,16 @@ public:
         adc_reset_calibration(ADC);
         adc_calibrate(ADC);
         usDelay(dly);
+    }
+    void start(uint32_t trig=ADC_CR2_EXTSEL_SWSTART)
+    {
         if (trig == ADC_CR2_EXTSEL_SWSTART)
         {
             ADC_LOG_DEBUG("Starting conversion by software");
             adc_start_conversion_regular(ADC);
         }
     }
-    void stop()
+    void powerOff()
     {
         adc_power_off(ADC);
     }
@@ -236,7 +235,7 @@ protected:
     }
     void dmaStopPeripheralRx()
     {
-        stop();
+        powerOff();
         adc_disable_dma(ADC);
     }
 public:
@@ -305,19 +304,17 @@ public:
     uint8_t useSingleChannel(uint8_t chan, T timeFreq)
     {
         assert(chan < 18);
+//        assert(isInitialized() &&
+//            ((mInitOpts & (kOptContConv|kOptScanMode)) == 0));
         uint8_t code = sampleTimeFreqToCode(timeFreq);
-        adc_set_regular_sequence(ADC, 1, &code);
-//      ADC_SQR1(ADC) = (ADC_SQR1(ADC) & ~ADC_SQR1_L_MSK) | (1 << ADC_SQR1_L_LSB);
-//      ADC_SQR3(ADC) = chan;
+        adc_set_regular_sequence(ADC, 1, &chan);
+        adc_set_sample_time(ADC, chan, code);
         ADC_LOG_DEBUG("useSingleChannel: chan %, sample freq: %Hz (%ns, code: %)",
             chan, sampleTimeCodeToFreq(code), sampleTimeCodeToNs(code), code);
         return code;
     }
-    uint16_t convertSingle(uint8_t channel)
+    uint16_t convertSingle()
     {
-        assert(isInitialized() &&
-               ((mInitOpts & (kOptContConv|kOptScanMode)) == 0));
-        useSingleChannel(channel);
         adc_start_conversion_direct(ADC);
         /* Wait for end of conversion. */
         while (!(adc_eoc(ADC)));
