@@ -22,6 +22,7 @@ void setPrintSink(PrintSinkFunc func, void* userp, uint8_t flags)
     gPrintSinkFlags = flags;
 }
 
+// Trivial case for the tsnprintf recursion.
 char* tsnprintf(char* buf, size_t bufsize, const char* fmtStr)
 {
     if (!buf)

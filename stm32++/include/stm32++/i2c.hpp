@@ -110,7 +110,7 @@ bool start(uint8_t address, bool tx, bool ack)
     i2c_send_start(I2C);
     /* Waiting for START to be sent and switched to master mode. */
     while (!(I2C_SR1(I2C) & I2C_SR1_SB));
-    assert(I2C_SR2(I2C) & I2C_SR2_MSL);
+    xassert(I2C_SR2(I2C) & I2C_SR2_MSL);
 
     if (ack)
         i2c_enable_ack(I2C);
@@ -127,18 +127,18 @@ bool start(uint8_t address, bool tx, bool ack)
         if (timer.msElapsed() > kTimeoutMs)
             return false;
     }
-    assert(!(I2C_SR1(I2C) & I2C_SR1_SB));
+    xassert(!(I2C_SR1(I2C) & I2C_SR1_SB));
     (volatile uint32_t)I2C_SR2(I2C);
 
 #ifndef NDEBUG
     uint32_t sr2 = I2C_SR2(I2C);
     if (tx)
-        assert(sr2 & I2C_SR2_TRA);
+        xassert(sr2 & I2C_SR2_TRA);
     else
-        assert(!(sr2 & I2C_SR2_TRA));
+        xassert(!(sr2 & I2C_SR2_TRA));
 #endif
 
-    assert((I2C_SR1(I2C) & I2C_SR1_ADDR) == 0);
+    xassert((I2C_SR1(I2C) & I2C_SR1_ADDR) == 0);
     return true;
 }
 
@@ -273,7 +273,7 @@ void stop()
     {
         if (timer.msElapsed() > kTimeoutMs)
         {
-            assert(false && "stop(): Timeout waiting for output flush");
+            xassert(false && "stop(): Timeout waiting for output flush");
             for(;;);
         }
     }
@@ -340,7 +340,8 @@ struct PeriphInfo<I2C1>
         kDmaRxChannel = DMA_CHANNEL7,
         kDmaWordSize = 8
     };
-    static constexpr uint32_t dataRegister() { return (uint32_t)(&I2C1_DR); }
+    static constexpr uint32_t kDmaRxDataRegister = (uint32_t)(&I2C1_DR);
+    static constexpr uint32_t kDmaTxDataRegister = (uint32_t)(&I2C1_DR);
 };
 template<>
 struct PeriphInfo<I2C2>
@@ -353,5 +354,6 @@ struct PeriphInfo<I2C2>
         kDmaRxChannel = DMA_CHANNEL5,
         kDmaWordSize = 8
     };
-    static constexpr uint32_t dataRegister() { return (uint32_t)(&I2C2_DR); }
+    static constexpr uint32_t kDmaTxDataRegister =(uint32_t)(&I2C2_DR);
+    static constexpr uint32_t kDmaRxDataRegister =(uint32_t)(&I2C2_DR);
 };

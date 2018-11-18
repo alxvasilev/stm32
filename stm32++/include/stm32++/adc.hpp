@@ -19,7 +19,7 @@
 #include <stm32++/dma.hpp>
 #include <stm32++/timeutl.hpp>
 #include <stm32++/common.hpp>
-#include <assert.h>
+#include <stm32++/xassert.hpp>
 
 #define ADC_ENABLE_DEBUG
 #ifdef ADC_ENABLE_DEBUG
@@ -92,7 +92,8 @@ public:
     bool isInitialized() const { return (mInitOpts & kOptNotInitialized) == 0; }
     void init(uint8_t opts, uint32_t adcClockFreq=12000000)
     {
-        assert(adcClockFreq > 0 && adcClockFreq <= 14000000);
+        ADC_LOG_DEBUG("Initializing with options %", opts);
+        xassert(adcClockFreq > 0 && adcClockFreq <= 14000000);
         // calculate rounded ratio - adc is clocked by dividing apb2 clock
         uint32_t ratio = ((rcc_apb2_frequency << 1) + adcClockFreq) / (adcClockFreq << 1);
         if (ratio & 1) //must be an even number
@@ -106,13 +107,13 @@ public:
             ratio = codeToClockRatio(divCode);
         }
         rcc_periph_clock_enable(Self::kClockId);
+        ADC_LOG_DEBUG("Enabled clock");
 
         /* Make sure the ADC doesn't run during config. */
         adc_power_off(ADC);
         rcc_periph_reset_pulse(Self::kResetBit);
         rcc_set_adcpre(divCode);
         mClockFreq = currentClockFreq();
-        ADC_LOG_DEBUG("init with opts = %, requested clock: %Hz, actual clock: = %Hz", opts, adcClockFreq, mClockFreq);
 
         adc_set_right_aligned(ADC);
         adc_set_dual_mode(ADC_CR1_DUALMOD_IND);
@@ -145,6 +146,7 @@ public:
             enableVrefAsync();
         }
         usDelay((opts & kOptNoVref) ? 3 : 10);
+        ADC_LOG_DEBUG("Init complete: requested clock: %Hz, actual clock: = %Hz", adcClockFreq, mClockFreq);
     }
     void enableExtTrigRegular(uint32_t trig)
     {
@@ -194,22 +196,26 @@ public:
     bool isRunning() const { return (ADC_CR2(ADC) & ADC_CR2_ADON) != 0; }
     void powerOn(uint32_t trig=ADC_CR2_EXTSEL_SWSTART)
     {
-        assert(!isRunning());
+        xassert(!isRunning());
         adc_enable_external_trigger_regular(ADC, trig);
+        ADC_LOG_DEBUG("Enabled external trigger %", fmtHex(trig));
         adc_power_on(ADC);
+        ADC_LOG_DEBUG("Powered on");
         //at least 2 clock cycles after power on, before calibration
         uint32_t dly = 4000000000 / mClockFreq;
         usDelay(dly);
         adc_reset_calibration(ADC);
         adc_calibrate(ADC);
         usDelay(dly);
+        ADC_LOG_DEBUG("Calibrated");
     }
     void start(uint32_t trig=ADC_CR2_EXTSEL_SWSTART)
     {
+        xassert(isRunning());
         if (trig == ADC_CR2_EXTSEL_SWSTART)
         {
-            ADC_LOG_DEBUG("Starting conversion by software");
-            adc_start_conversion_regular(ADC);
+            adc_start_conversion_regular(ADC); //sets ADC_CR2_SWSTART
+            ADC_LOG_DEBUG("Started conversion by software");
         }
     }
     void powerOff()
@@ -258,7 +264,7 @@ public:
         case 1: return 4;
         case 2: return 6;
         case 3: return 8;
-        default: assert(false); return 0; //silence no return warning
+        default: xassert(false); return 0; //silence no return warning
         }
     }
     static uint8_t sampleCyclesToCode(int16_t cycles)
@@ -303,7 +309,7 @@ public:
     template<class T>
     uint8_t useSingleChannel(uint8_t chan, T timeFreq)
     {
-        assert(chan < 18);
+        xassert(chan < 18);
 //        assert(isInitialized() &&
 //            ((mInitOpts & (kOptContConv|kOptScanMode)) == 0));
         uint8_t code = sampleTimeFreqToCode(timeFreq);
