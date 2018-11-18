@@ -211,7 +211,10 @@ public:
     }
     void start(uint32_t trig=ADC_CR2_EXTSEL_SWSTART)
     {
-        xassert(isRunning());
+        if (!isRunning())
+        {
+            powerOn();
+        }
         if (trig == ADC_CR2_EXTSEL_SWSTART)
         {
             adc_start_conversion_regular(ADC); //sets ADC_CR2_SWSTART
