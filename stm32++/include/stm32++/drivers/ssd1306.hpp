@@ -178,6 +178,17 @@ public:
     {
         cmd(SSD1306_SETCONTRAST, val);    // 0x81
     }
+    template <bool D=HasTxDma<IO>::value>
+    typename std::enable_if<D, void>::type sendBuffer()
+    {
+        mIo.dmaTxStart(mBuf, sizeof(mBuf), nullptr);
+    }
+    template <bool D=HasTxDma<IO>::value>
+    typename std::enable_if<!D, void>::type sendBuffer()
+    {
+        mIo.blockingSend(mBuf, W*H/8);
+        mIo.stop();
+    }
     void updateScreen()
     {
         cmd(SSD1306_COLUMNADDR, 0, W-1);
@@ -185,20 +196,20 @@ public:
 
         mIo.startSend(mAddr, false);
         mIo.sendByte(0x40);
-        if (HasTxDma<decltype(mIo)>::value)
-        {
-            mIo.dmaTxStart(mBuf, sizeof(mBuf), nullptr);
-        }
-        else
-        {
-            mIo.blockingSend(mBuf, W*H/8);
-            mIo.stop();
-        }
+        sendBuffer();
     }
+    template <bool D=HasTxDma<IO>::value>
+    typename std::enable_if<D, void>::type waitTxComplete()
+    {
+        while (mIo.txBusy());
+    }
+    template <bool D=HasTxDma<IO>::value>
+    typename std::enable_if<!D, void>::type waitTxComplete()
+    {}
     template <class... Args>
     void cmd(Args... args)
     {
-        while (mIo.txBusy());
+        waitTxComplete();
         mIo.startSend(mAddr);
         mIo.sendByte(0);
         mIo.sendByte(args...);
