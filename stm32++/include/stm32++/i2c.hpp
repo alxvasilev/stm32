@@ -338,7 +338,7 @@ struct PeriphInfo<I2C1>
     enum: uint8_t {
         kDmaTxChannel = DMA_CHANNEL6,
         kDmaRxChannel = DMA_CHANNEL7,
-        kDmaWordSize = 8
+        kDmaWordSize = 1
     };
     static constexpr uint32_t kDmaRxDataRegister = (uint32_t)(&I2C1_DR);
     static constexpr uint32_t kDmaTxDataRegister = (uint32_t)(&I2C1_DR);
@@ -352,7 +352,7 @@ struct PeriphInfo<I2C2>
     enum: uint8_t {
         kDmaTxChannel = DMA_CHANNEL4,
         kDmaRxChannel = DMA_CHANNEL5,
-        kDmaWordSize = 8
+        kDmaWordSize = 1
     };
     static constexpr uint32_t kDmaTxDataRegister =(uint32_t)(&I2C2_DR);
     static constexpr uint32_t kDmaRxDataRegister =(uint32_t)(&I2C2_DR);

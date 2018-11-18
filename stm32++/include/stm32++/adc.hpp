@@ -21,7 +21,7 @@
 #include <stm32++/common.hpp>
 #include <stm32++/xassert.hpp>
 
-#define ADC_ENABLE_DEBUG
+//#define ADC_ENABLE_DEBUG
 #ifdef ADC_ENABLE_DEBUG
 #define ADC_LOG_DEBUG(fmt,...) tprintf("adc: " fmt "\n", ##__VA_ARGS__)
 #else
@@ -404,7 +404,7 @@ struct PeriphInfo<ADC1>
 {
     static constexpr rcc_periph_clken kClockId = RCC_ADC1;
     enum: uint32_t { kDmaRxId = DMA1, kDmaRxDataRegister = (uint32_t)(&ADC1_DR) };
-    enum: uint8_t { kDmaRxChannel = DMA_CHANNEL1, kDmaWordSize = 16 };
+    enum: uint8_t { kDmaRxChannel = DMA_CHANNEL1, kDmaWordSize = 2 };
     static constexpr rcc_periph_rst kResetBit = RST_ADC1;
 };
 template<>
@@ -420,7 +420,7 @@ struct PeriphInfo<ADC3>
 {
     static constexpr rcc_periph_clken kClockId = RCC_ADC3;
     enum: uint32_t { kDmaRxId = DMA2, kDmaRxDataRegister = (uint32_t)(&ADC3_DR) };
-    enum: uint8_t { kDmaRxChannel = DMA_CHANNEL5 };
+    enum: uint8_t { kDmaRxChannel = DMA_CHANNEL5, kDmaWordSize = 2 };
     static constexpr rcc_periph_rst kResetBit = RST_ADC3;
 };
 

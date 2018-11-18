@@ -11,8 +11,11 @@
 #include "xassert.hpp"
 #include "snprint.hpp"
 #include "common.hpp"
-
-#define DMA_LOG_DEBUG(fmt,...) tprintf("dma: " fmt "\n", ##__VA_ARGS__)
+#ifdef DMA_ENABLE_DEBUG
+    #define DMA_LOG_DEBUG(fmt,...) tprintf("dma: " fmt "\n", ##__VA_ARGS__)
+#else
+   #define DMA_LOG_DEBUG(fmt,...)
+#endif
 TYPE_SUPPORTS(HasTxDma, &std::remove_reference<T>::type::dmaTxStop);
 TYPE_SUPPORTS(HasRxDma, &std::remove_reference<T>::type::dmaRxStop);
 
@@ -22,9 +25,9 @@ constexpr uint32_t periphSizeCode(uint8_t size)
 {
     switch(size)
     {
-        case 8: return DMA_CCR_PSIZE_8BIT;
-        case 16: return DMA_CCR_PSIZE_16BIT;
-        case 32: return DMA_CCR_PSIZE_32BIT;
+        case 1: return DMA_CCR_PSIZE_8BIT;
+        case 2: return DMA_CCR_PSIZE_16BIT;
+        case 4: return DMA_CCR_PSIZE_32BIT;
         default: __builtin_trap();
     }
 }
@@ -32,9 +35,9 @@ constexpr uint32_t memSizeCode(uint8_t size)
 {
     switch(size)
     {
-        case 8: return DMA_CCR_MSIZE_8BIT;
-        case 16: return DMA_CCR_MSIZE_16BIT;
-        case 32: return DMA_CCR_MSIZE_32BIT;
+        case 1: return DMA_CCR_MSIZE_8BIT;
+        case 2: return DMA_CCR_MSIZE_16BIT;
+        case 4: return DMA_CCR_MSIZE_32BIT;
         default: __builtin_trap();
     }
 }
@@ -84,10 +87,26 @@ public:
     template <typename... Args>
     void init(Args... args)
     {
+        enum: uint8_t { chan = Self::kDmaTxChannel };
+        enum: uint32_t { dma = Self::kDmaTxId };
+
         Base::init(args...);
         DMA_LOG_DEBUG("Initializing %, channel %, irq % for Tx with opts: %",
             Self::deviceName(), (int)Base::kDmaTxChannel, (int)kDmaTxIrq, fmtHex(Opts));
-        nvic_set_priority(kDmaTxIrq, (Opts & kIrqPrioMask) >> kIrqPrioShift);
+
+        dma_channel_reset(dma, chan);
+        dma_set_peripheral_address(dma, chan, Base::kDmaTxDataRegister);
+        dma_set_peripheral_size(dma, chan, periphSizeCode(Self::kDmaWordSize));
+        dma_disable_peripheral_increment_mode(dma, chan);
+
+        dma_set_read_from_memory(dma, chan);
+        dma_enable_memory_increment_mode(dma, chan);
+        dma_set_priority(dma, chan, ((Opts & kPrioMask) >> kPrioShift) << DMA_CCR_PL_SHIFT);
+        if ((Opts & kDmaNoDoneIntr) == 0)
+        {
+            nvic_set_priority(kDmaTxIrq, (Opts & kIrqPrioMask) >> kIrqPrioShift);
+        }
+
         if (HasRxDma<Base>::value || ((Opts & kDmaDontEnableClock) == 0))
         {
             rcc_periph_clock_enable(Self::kDmaClockId);
@@ -109,21 +128,16 @@ public:
     {
         enum: uint8_t { chan = Self::kDmaTxChannel };
         enum: uint32_t { dma = Self::kDmaTxId };
+        xassert(size % Base::kDmaWordSize == 0);
+
         while(mTxBusy);
         mTxBusy = true;
         mTxBuf = data;
         mFreeFunc = freeFunc;
 
-        dma_channel_reset(dma, chan);
-        dma_set_peripheral_address(dma, chan, Base::kDmaTxDataRegister);
         dma_set_memory_address(dma, chan, (uint32_t)data);
-        dma_set_number_of_data(dma, chan, size);
-        dma_set_read_from_memory(dma, chan);
-        dma_enable_memory_increment_mode(dma, chan);
-        dma_disable_peripheral_increment_mode(dma, chan);
-        dma_set_peripheral_size(dma, chan, periphSizeCode(Self::kDmaWordSize));
+        dma_set_number_of_data(dma, chan, size / Base::kDmaWordSize);
         dma_set_memory_size(dma, chan, memSizeCode(Self::kDmaWordSize));
-        dma_set_priority(dma, chan, ((Opts & kPrioMask) >> kPrioShift) << DMA_CCR_PL_SHIFT);
         dma_enable_transfer_complete_interrupt(dma, chan);
         nvic_enable_irq(kDmaTxIrq);
         dma_enable_channel(dma, chan);
@@ -179,7 +193,24 @@ public:
         enum: uint8_t { chan = Base::kDmaRxChannel };
         enum: uint32_t { dma = Base::kDmaRxId };
 
-        nvic_set_priority(kDmaRxIrq, (Opts & kIrqPrioMask) >> kIrqPrioShift);
+        dma_disable_channel(dma, chan);
+        dma_channel_reset(dma, chan);
+        dma_set_peripheral_address(dma, chan, (uint32_t)Base::kDmaRxDataRegister);
+        dma_set_peripheral_size(dma, chan, periphSizeCode(Base::kDmaWordSize));
+        dma_disable_peripheral_increment_mode(dma, chan);
+
+        dma_enable_memory_increment_mode(dma, chan);
+        dma_set_read_from_peripheral(dma, chan);
+        dma_set_priority(dma, chan, ((Opts & kPrioMask) >> kPrioShift) << DMA_CCR_PL_SHIFT);
+        if (Opts & kDmaCircularMode)
+        {
+            dma_enable_circular_mode(dma, chan);
+        }
+        else if ((Opts & kDmaNoDoneIntr) == 0) // Interrupt when transfer complete
+        {
+            nvic_set_priority(kDmaRxIrq, (Opts & kIrqPrioMask) >> kIrqPrioShift);
+        }
+
         if (HasTxDma<Base>::value || ((Opts & kDmaDontEnableClock) == 0))
         {
             rcc_periph_clock_enable(Self::kDmaClockId);
@@ -189,62 +220,36 @@ public:
     template <typename... Args>
     void dmaRxStart(const void* data, uint16_t size, Args... args)
     {
+        xassert(size % Base::kDmaWordSize == 0);
         enum: uint32_t { dma = Base::kDmaRxId };
         enum: uint8_t { chan = Base::kDmaRxChannel };
         while(mRxBusy);
         mRxBusy = true;
-        dma_disable_channel(dma, chan);
-        dma_channel_reset(dma, chan);
-        dma_set_peripheral_address(dma, chan, (uint32_t)Base::kDmaRxDataRegister);
-        dma_set_peripheral_size(dma, chan, periphSizeCode(Base::kDmaWordSize));
-        dma_disable_peripheral_increment_mode(dma, chan);
 
         dma_set_memory_address(dma, chan, (uint32_t)data);
         dma_set_memory_size(dma, chan, memSizeCode(Base::kDmaWordSize));
-        dma_enable_memory_increment_mode(dma, chan);
-
-        dma_set_number_of_data(dma, chan, size);
-        dma_set_read_from_peripheral(dma, chan);
-        dma_set_priority(dma, chan, ((Opts & kPrioMask) >> kPrioShift) << DMA_CCR_PL_SHIFT);
-        if (Opts & kDmaCircularMode)
+        dma_set_number_of_data(dma, chan, size / Base::kDmaWordSize);
+        dma_enable_channel(dma, chan);
+        if ((Opts & kDmaNoDoneIntr) == 0)
         {
-            dma_enable_circular_mode(dma, chan);
-        }
-//        else if ((Opts & kDmaNoDoneIntr) == 0) // Interrupt when transfer complete
-//        {
-            dma_enable_transfer_complete_interrupt(dma, chan);
+            dma_enable_transfer_complete_interrupt(Base::kDmaRxId, Base::kDmaRxChannel);
             nvic_enable_irq(kDmaRxIrq);
-//        }
-        dma_enable_channel(dma, chan);
+        }
         Base::dmaStartPeripheralRx(args...);
-
-/*
-        dma_channel_reset(dma, chan);
-        dma_set_peripheral_address(dma, chan, Base::kDmaTxDataRegister);
-        dma_set_memory_address(dma, chan, (uint32_t)data);
-        dma_set_number_of_data(dma, chan, size);
-        dma_set_read_from_memory(dma, chan);
-        dma_enable_memory_increment_mode(dma, chan);
-        dma_disable_peripheral_increment_mode(dma, chan);
-        dma_set_peripheral_size(dma, chan, periphSizeCode(Self::kDmaWordSize));
-        dma_set_memory_size(dma, chan, memSizeCode(Self::kDmaWordSize));
-        dma_set_priority(dma, chan, ((Opts & kPrioMask) >> kPrioShift) << DMA_CCR_PL_SHIFT);
-        dma_enable_transfer_complete_interrupt(dma, chan);
-        dma_enable_channel(dma, chan);
-        //have to enable DMA for peripheral at the upper level and the transfer should start
-        Base::dmaStartPeripheralTx(args...);
-*/
     }
     void dmaRxIsr()
     {
         if ((DMA_ISR(Base::kDmaRxId) & DMA_ISR_TCIF(Self::kDmaRxChannel)) == 0)
+        {
+            tprintf("dma already stopped\n");
             return;
-
+        }
         DMA_IFCR(Base::kDmaRxId) |= DMA_IFCR_CTCIF(Self::kDmaRxChannel);
         dmaRxStop();
     }
     void dmaRxStop()
     {
+        nvic_disable_irq(kDmaRxIrq);
         dma_disable_transfer_complete_interrupt(Base::kDmaRxId, Base::kDmaRxChannel);
         Base::dmaStopPeripheralRx();
         dma_disable_channel(Base::kDmaRxId, Base::kDmaRxChannel);

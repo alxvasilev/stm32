@@ -57,6 +57,11 @@ char* tsnprintf(char* buf, size_t bufsize, const char* fmtStr, Val val, Args... 
             // if it managed to write everything. However, that returned
             // address may be past the end of the buffer, so we need to check
             buf = toString<kDontNullTerminate>(buf, bufend-buf+1, val);
+            if (!buf)
+            {
+                *bufend = 0;
+                return nullptr;
+            }
             if (buf >= bufend)
             {
                 *bufend = 0;
