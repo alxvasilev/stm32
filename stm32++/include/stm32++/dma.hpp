@@ -11,8 +11,11 @@
 #include "xassert.hpp"
 #include "snprint.hpp"
 #include "common.hpp"
+
+//#define DMA_ENABLE_DEBUG
+
 #ifdef DMA_ENABLE_DEBUG
-    #define DMA_LOG_DEBUG(fmt,...) tprintf("dma: " fmt "\n", ##__VA_ARGS__)
+    #define DMA_LOG_DEBUG(fmt,...) tprintf("%(%): " fmt "\n", Base::periphName(), DmaInfo::periphName(), ##__VA_ARGS__)
 #else
    #define DMA_LOG_DEBUG(fmt,...)
 #endif
@@ -77,6 +80,7 @@ class Tx: public Base, private PeriphInfo<Base::kDmaTxId>
 {
 private:
     typedef Tx<Base, Opts> Self;
+    typedef PeriphInfo<Base::kDmaTxId> DmaInfo;
     typedef void(*FreeFunc)(void*);
     volatile bool mTxBusy = false;
     volatile const void* mTxBuf = nullptr;
@@ -91,8 +95,14 @@ public:
         enum: uint32_t { dma = Self::kDmaTxId };
 
         Base::init(args...);
-        DMA_LOG_DEBUG("Initializing %, channel %, irq % for Tx with opts: %",
-            Self::deviceName(), (int)Base::kDmaTxChannel, (int)kDmaTxIrq, fmtHex(Opts));
+        DMA_LOG_DEBUG("Tx: Initializing channel %, irq %, opts: %",
+            (int)Base::kDmaTxChannel, (int)kDmaTxIrq, fmtHex(Opts));
+
+        if (!HasRxDma<Base>::value)
+        {
+            rcc_periph_clock_enable(Self::kDmaClockId);
+            DMA_LOG_DEBUG("Tx: Enabled clock");
+        }
 
         dma_channel_reset(dma, chan);
         dma_set_peripheral_address(dma, chan, Base::kDmaTxDataRegister);
@@ -105,13 +115,9 @@ public:
         if ((Opts & kDmaNoDoneIntr) == 0)
         {
             nvic_set_priority(kDmaTxIrq, (Opts & kIrqPrioMask) >> kIrqPrioShift);
+            DMA_LOG_DEBUG("Tx: Enabled transfer complete interrupt");
         }
 
-        if (HasRxDma<Base>::value || ((Opts & kDmaDontEnableClock) == 0))
-        {
-            rcc_periph_clock_enable(Self::kDmaClockId);
-            DMA_LOG_DEBUG("Enabled clock for %", Self::deviceName());
-        }
     }
     /** @brief Initiates a DMA transfer of the buffer specified
      * by the \c data and \c size paremeters.
@@ -138,8 +144,11 @@ public:
         dma_set_memory_address(dma, chan, (uint32_t)data);
         dma_set_number_of_data(dma, chan, size / Base::kDmaWordSize);
         dma_set_memory_size(dma, chan, memSizeCode(Self::kDmaWordSize));
-        dma_enable_transfer_complete_interrupt(dma, chan);
-        nvic_enable_irq(kDmaTxIrq);
+        if ((Opts & kDmaNoDoneIntr) == 0)
+        {
+            dma_enable_transfer_complete_interrupt(dma, chan);
+            nvic_enable_irq(kDmaTxIrq);
+        }
         dma_enable_channel(dma, chan);
         //have to enable DMA for peripheral at the upper level and the transfer should start
         Base::dmaStartPeripheralTx(args...);
@@ -180,6 +189,7 @@ class Rx: public Base, private PeriphInfo<Base::kDmaRxId>
 private:
     volatile bool mRxBusy = false;
     typedef Rx<Base, Opts> Self;
+    typedef PeriphInfo<Base::kDmaRxId> DmaInfo;
 public:
     enum: uint8_t { kDmaRxIrq = Self::dmaIrqForChannel(Self::kDmaRxChannel) };
     volatile bool dmaRxBusy() const { return mRxBusy; }
@@ -187,11 +197,17 @@ public:
     void init(Args... args)
     {
         Base::init(args...);
-        DMA_LOG_DEBUG("Initializing %, channel %, irq % for Rx with opts: %",
-            Self::deviceName(), (int)Base::kDmaRxChannel, (int)kDmaRxIrq, fmtHex(Opts));
+        DMA_LOG_DEBUG("Rx: Initializing channel %, irq %, opts: %",
+            (int)Base::kDmaRxChannel, (int)kDmaRxIrq, fmtHex(Opts));
 
         enum: uint8_t { chan = Base::kDmaRxChannel };
         enum: uint32_t { dma = Base::kDmaRxId };
+
+        if (!HasTxDma<Base>::value)
+        {
+            rcc_periph_clock_enable(Self::kDmaClockId);
+            DMA_LOG_DEBUG("Rx: Enabled clock");
+        }
 
         dma_disable_channel(dma, chan);
         dma_channel_reset(dma, chan);
@@ -209,12 +225,7 @@ public:
         else if ((Opts & kDmaNoDoneIntr) == 0) // Interrupt when transfer complete
         {
             nvic_set_priority(kDmaRxIrq, (Opts & kIrqPrioMask) >> kIrqPrioShift);
-        }
-
-        if (HasTxDma<Base>::value || ((Opts & kDmaDontEnableClock) == 0))
-        {
-            rcc_periph_clock_enable(Self::kDmaClockId);
-            DMA_LOG_DEBUG("Enabled clock for %", Self::deviceName());
+            DMA_LOG_DEBUG("Rx: Enabled transfer complete interrupt");
         }
     }
     template <typename... Args>
@@ -232,7 +243,7 @@ public:
         dma_enable_channel(dma, chan);
         if ((Opts & kDmaNoDoneIntr) == 0)
         {
-            dma_enable_transfer_complete_interrupt(Base::kDmaRxId, Base::kDmaRxChannel);
+            dma_enable_transfer_complete_interrupt(dma, chan);
             nvic_enable_irq(kDmaRxIrq);
         }
         Base::dmaStartPeripheralRx(args...);
@@ -241,7 +252,6 @@ public:
     {
         if ((DMA_ISR(Base::kDmaRxId) & DMA_ISR_TCIF(Self::kDmaRxChannel)) == 0)
         {
-            tprintf("dma already stopped\n");
             return;
         }
         DMA_IFCR(Base::kDmaRxId) |= DMA_IFCR_CTCIF(Self::kDmaRxChannel);
@@ -263,7 +273,6 @@ template<>
 struct PeriphInfo<DMA1>
 {
     enum: uint32_t { kDmaId = DMA1 };
-    static constexpr const char* deviceName() { return "DMA1"; }
     static constexpr rcc_periph_clken kDmaClockId = RCC_DMA1;
     static constexpr uint8_t dmaIrqForChannel(const uint8_t chan)
     {
@@ -279,6 +288,9 @@ struct PeriphInfo<DMA1>
             default: __builtin_trap();
         }
     }
+#ifndef NDEBUG
+    static constexpr const char* periphName() { return "DMA1"; }
+#endif
 };
 
 template<>
@@ -286,7 +298,6 @@ struct PeriphInfo<DMA2>
 {
     enum: uint32_t { kDmaId = DMA2 };
     static constexpr rcc_periph_clken kDmaClockId = RCC_DMA2;
-    static constexpr const char* deviceName() { return "DMA2"; }
     static constexpr uint8_t dmaIrqForChannel(const uint8_t chan)
     {
         switch (chan)
@@ -299,6 +310,9 @@ struct PeriphInfo<DMA2>
             default: __builtin_trap();
         }
     }
+#ifndef NDEBUG
+    static constexpr const char* periphName() { return "DMA2"; }
+#endif
 };
 
 #endif // DMA_HPP
