@@ -76,7 +76,7 @@ template<Flags flags=10, typename Val>
 typename std::enable_if<std::is_unsigned<Val>::value
                      && std::is_integral<Val>::value
                      && !std::is_same<Val, char>::value, char*>::type
-toString(char* buf, size_t bufsize, Val val, uint8_t numDigits=0)
+toString(char* buf, size_t bufsize, Val val, uint8_t minDigits=0, uint16_t minLen=0)
 {
     assert(buf);
     assert(bufsize);
@@ -87,24 +87,28 @@ toString(char* buf, size_t bufsize, Val val, uint8_t numDigits=0)
     DigitConverter<base, flags> digitConv;
     char stagingBuf[digitConv.digitsPerByte * sizeof(Val)];
     char* writePtr = stagingBuf;
-    for (; val; val /= base)
+    do
     {
         Val digit = val % base;
         *(writePtr++) = digitConv.toDigit(digit);
-    };
+        val /= base;
+    } while(val);
 
-    size_t len = writePtr - stagingBuf;
+    size_t numDigits = writePtr - stagingBuf;
     size_t padLen;
-    if (!len && !numDigits)
-        padLen = 1;
-    else if (len < numDigits)
-        padLen = numDigits - len;
+    if (minDigits && (numDigits < minDigits))
+    {
+        padLen = minDigits - numDigits;
+    }
     else
+    {
         padLen = 0;
-
+    }
+    size_t totalLen;
     if (((flags & kNoPrefix) == 0) && digitConv.prefixLen)
     {
-        if (bufsize < digitConv.prefixLen+padLen+len)
+        totalLen = digitConv.prefixLen+padLen+numDigits;
+        if (bufsize < totalLen)
         {
             *buf = 0;
             return nullptr;
@@ -113,20 +117,32 @@ toString(char* buf, size_t bufsize, Val val, uint8_t numDigits=0)
     }
     else
     {
-        if (bufsize < padLen+len)
+        totalLen = padLen + numDigits;
+        if (bufsize < totalLen)
         {
             *buf = 0;
             return nullptr;
         }
     }
+
+    while (totalLen < minLen)
+    {
+        *(buf++) = ' ';
+        totalLen++;
+    }
+
     for(;padLen; padLen--)
     {
         *(buf++) = '0';
     }
-    for(; len; len--)
+    // numDigits is at least one
+    do
     {
         *(buf++) = *(--writePtr);
-    }
+        numDigits--;
+
+    } while(numDigits);
+
 
     if ((flags & kDontNullTerminate) == 0)
         *buf = 0;
@@ -197,10 +213,11 @@ struct IntFmt
     enum: uint8_t { base = baseFromFlags(aFlags) };
     static constexpr Flags flags = aFlags & kFlagsBaseMask;
     ScalarType value;
-    uint8_t padding;
-    explicit IntFmt(T aVal, uint8_t aPad=0): value((ScalarType)(aVal)), padding(aPad){}
+    uint8_t minDigits;
+    uint8_t minLen;
+    explicit IntFmt(T aVal, uint8_t aMinDigits=0, uint8_t aMinLen=0): value((ScalarType)(aVal)), minDigits(aMinDigits), minLen(aMinLen){}
     template <class U=T, class=typename std::enable_if<!std::is_same<ScalarType, U>::value, void>::type>
-    explicit IntFmt(ScalarType aVal, uint8_t aPad=0): value(aVal), padding(aPad){}
+    explicit IntFmt(ScalarType aVal, uint8_t aMinDigits=0, uint8_t aMinLen=0): value(aVal), minDigits(aMinDigits), minLen(aMinLen){}
 };
 
 template <typename T, uint8_t base>
@@ -210,32 +227,32 @@ struct NumLenForBase
 };
 
 template <Flags flags=0, class T>
-IntFmt<T, flags> fmtInt(T aVal, uint8_t aPad=NumLenForBase<T,baseFromFlags(flags)>::value)
-{ return IntFmt<T, flags>(aVal, aPad); }
+IntFmt<T, flags> fmtInt(T aVal, uint8_t minDigits=0, uint8_t minSpaces=0)
+{ return IntFmt<T, flags>(aVal, minDigits, minSpaces); }
 
 template <Flags flags=0, class T>
-auto fmtHex(T aVal, uint8_t aPad=NumLenForBase<T,16>::value)
-{ return IntFmt<T, (flags&~kFlagsBaseMask)|16>(aVal, aPad); }
+auto fmtHex(T aVal, uint8_t minDigits=0, uint8_t minSpaces=0)
+{ return IntFmt<T, (flags&~kFlagsBaseMask)|16>(aVal, minDigits, minSpaces); }
 
 template <Flags flags=0, class T>
-auto fmtBin(T aVal, uint8_t aPad=NumLenForBase<T,2>::value)
-{ return IntFmt<T, (flags&~kFlagsBaseMask)|2>(aVal, aPad); }
+auto fmtBin(T aVal, uint8_t minDigits=0, uint8_t minSpaces=0)
+{ return IntFmt<T, (flags&~kFlagsBaseMask)|2>(aVal, minDigits, minSpaces); }
 
 template <Flags flags=0>
-auto fmtHex8(uint8_t aVal, uint8_t aPad=2)
-{ return IntFmt<uint8_t, (flags&~kFlagsBaseMask)|16>(aVal, aPad); }
+auto fmtHex8(uint8_t aVal, uint8_t minDigits=2)
+{ return IntFmt<uint8_t, (flags&~kFlagsBaseMask)|16>(aVal, minDigits); }
 
 template <Flags flags=0>
-auto fmtBin8(uint8_t aVal, uint8_t aPad=8)
-{ return IntFmt<uint8_t, (flags&~kFlagsBaseMask)|2>(aVal, aPad); }
+auto fmtBin8(uint8_t aVal, uint8_t minDigits=8)
+{ return IntFmt<uint8_t, (flags&~kFlagsBaseMask)|2>(aVal, minDigits); }
 
 template <Flags flags=0>
-auto fmtHex16(uint16_t aVal, uint8_t aPad=4)
-{ return IntFmt<uint16_t, (flags&~kFlagsBaseMask)|16>(aVal, aPad); }
+auto fmtHex16(uint16_t aVal, uint8_t minDigits=4)
+{ return IntFmt<uint16_t, (flags&~kFlagsBaseMask)|16>(aVal, minDigits); }
 
 template <Flags flags=0>
-auto fmtBin16(uint16_t aVal, uint8_t aPad=16)
-{ return IntFmt<uint16_t, (flags&~kFlagsBaseMask)|2>(aVal, aPad); }
+auto fmtBin16(uint16_t aVal, uint8_t minDigits=16)
+{ return IntFmt<uint16_t, (flags&~kFlagsBaseMask)|2>(aVal, minDigits); }
 
 template <Flags flags=16, class T>
 IntFmt<T, flags> fmtStruct(T aVal)
@@ -254,7 +271,7 @@ toString(char *buf, size_t bufsize, P ptr)
 template<Flags flags=0, Flags fmtFlags, typename Val>
 char* toString(char *buf, size_t bufsize, IntFmt<Val, fmtFlags> num)
 {
-    return toString<num.flags | (flags & ~kFlagsBaseMask)>(buf, bufsize, num.value, num.padding);
+    return toString<num.flags | (flags & ~kFlagsBaseMask)>(buf, bufsize, num.value, num.minDigits, num.minLen);
 }
 
 template<Flags flags=0>
@@ -334,7 +351,7 @@ struct Pow<base, 1>
 
 template<Flags flags=6, typename Val>
 typename std::enable_if<std::is_floating_point<Val>::value, char*>::type
-toString(char* buf, size_t bufsize, Val val, uint8_t padding=0)
+toString(char* buf, size_t bufsize, Val val, uint8_t minDigits=0)
 {
     enum: uint8_t { prec = precFromFlags(flags) };
     if (!bufsize)
@@ -364,17 +381,18 @@ toString(char* buf, size_t bufsize, Val val, uint8_t padding=0)
     }
     size_t whole = (size_t)(val);
 
+    // value to multiply the fractional part so that it becomes an int
     enum: uint32_t { mult = Pow<10, prec>::value };
-    size_t decimal = (val-whole)*mult+0.5;
-    if (decimal >= mult) //the part after the dot overflows to >= 1 due to rounding
+    size_t fractional = (val - whole) * mult + 0.5;
+    if (fractional >= mult) //the part after the dot overflows to >= 1 due to rounding
     {
         //move the overflowed unit to the whole part and subtract it from
         //the decimal
         whole++;
-        decimal-=mult;
+        fractional -= mult;
     }
     //we have some minimum space for null termination even if buffer is not enough
-    buf = toString<(flags&~kFlagsBaseMask)|10>(buf, bufRealEnd-buf, whole, padding);
+    buf = toString<(flags&~kFlagsBaseMask)|10>(buf, bufRealEnd-buf, whole, minDigits);
     if (!buf)
     {
         assert(*(bufRealEnd-1)==0); //assert null termination
@@ -387,7 +405,7 @@ toString(char* buf, size_t bufsize, Val val, uint8_t padding=0)
         return nullptr;
     }
     *(buf++) = '.';
-    return toString(buf, bufRealEnd-buf, decimal, prec);
+    return toString(buf, bufRealEnd-buf, fractional, prec);
 }
 
 template <class T, Flags aFlags>
@@ -396,14 +414,14 @@ struct FpFmt
     enum: uint8_t { prec = precFromFlags(aFlags) };
     constexpr static Flags flags = aFlags & kFlagsPrecMask;
     T value;
-    uint8_t padding;
-    FpFmt(T aVal, uint8_t aPad): value(aVal), padding(aPad){}
+    uint8_t minDigits;
+    FpFmt(T aVal, uint8_t aMinDigits): value(aVal), minDigits(aMinDigits){}
 };
 
 template <Flags aFlags=6, class T>
-auto fmtFp(T val, uint8_t pad=0)
+auto fmtFp(T val, uint8_t minDigits=0)
 {
-    return FpFmt<T, aFlags>(val, pad);
+    return FpFmt<T, aFlags>(val, minDigits);
 }
 
 template <Flags generalFlags, Flags fpFlags, typename Val>
@@ -412,7 +430,7 @@ char* toString(char *buf, size_t bufsize, FpFmt<Val, fpFlags> fp)
     // Extract precision and padding, merge other flags from fpFlags to aFlags to
     // and forward to the toString(float) version
     // General flags filtered out from fpFlags and fp formatting flags filtered out from general flags
-    return toString<fp.flags | (generalFlags & ~kFlagsPrecMask), Val>(buf, bufsize, fp.value, fp.padding);
+    return toString<fp.flags | (generalFlags & ~kFlagsPrecMask), Val>(buf, bufsize, fp.value, fp.minDigits);
 }
 
 template <uint8_t aFlags=0>

@@ -184,10 +184,10 @@ public:
         adc_set_sample_time(ADC, chan, code);
         return code;
     }
-    uint32_t sampleTimeCodeToFreq(uint8_t code)
+    float sampleTimeCodeToFreq(uint8_t code)
     {
         auto cycles = codeToSampleCycles(code);
-        return mClockFreq / cycles;
+        return (float)mClockFreq / (float)cycles;
     }
     uint32_t sampleTimeCodeToNs(uint8_t code)
     {
