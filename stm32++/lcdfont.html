@@ -679,35 +679,53 @@ function loadLocalFile(event)
 }
 function parseFontCSource(contents)
 {
-    var fontHeight = 7;
-    var bytesPerCol = ((fontHeight+7)/8)|0;
+    var m = contents.match(/Font\s+?[^\s]+?\(\d+\s*?,\s*?(\d+)\s*,/m);
+    var fontHeight;
+    if (m && m.length === 2) {
+        fontHeight = parseInt(m[1]);
+    };
+    while(isNaN(fontHeight)) {
+        hstr = prompt("Can't detect font height, please enter it");
+        if (!hstr) {
+            return;
+        }
+        fontHeight = parseInt(hstr);
+    };
+    //var bytesPerCol = ((fontHeight+7)/8)|0;
     var models = [];
-    var lines = contents.match(/(0x[0-9a-fA-F][0-9a-fA-F][,\s]*){4,}/gm);
+    var lines = contents.match(/(0x[0-9a-fA-F]+[,\s]*){4,}/gm);
     var ll = lines.length;
     for (var l=0; l<ll; l++) {
         var line = lines[l];
-        var bytes = line.match(/(0x[0-9a-fA-F][0-9a-fA-F])/g);
-        var bl = bytes.length;
-        var width = bl / bytesPerCol;
-        assert((bl % bytesPerCol) === 0);
-        var model = new GlyphModel(width, fontHeight, String.fromCharCode(l+32));
-        models.push(model);
-        for (var b=0; b < bl; b++) {
-            var col = (b % (width*bytesPerCol)/bytesPerCol)|0;
-            var baseRow = (b / (width*bytesPerCol))|0;
-            var byte = parseInt(bytes[b]);
-
-            var endRow = (baseRow+1)*8;
-            if (endRow > fontHeight) {
-                endRow = fontHeight;
-            }
-            for (var i=baseRow; i<endRow; i++, byte >>= 1) {
-                var row = model.rows[i];
-                row[col] = (byte & 1) ? true : false;
-            }
-        }
+        var bytes = line.match(/(0x[0-9a-fA-F]+)/g);
+        models.push(loadModelFromSourceLine(line, width, fontHeight));
     }
     loadEditor(models);
+}
+
+function loadModelFromSourceLineHScan(line, lineNo, bytes, fontHeight) {
+    var width = bytes.length;
+    var model = new GlyphModel(fontHeight, width, String.fromCharCode(lineNo+32));
+
+    for (var col = 0; col < width; col++) {
+        var byte = parseInt(bytes[col]);
+        for (var i = 0; i < fontHeight; i++, byte >>= 1) {
+            var row = model.rows[col];
+            row[i] = (byte & 1) ? true : false;
+        }
+    }
+}
+function loadModelFromSourceLineHScan(line, lineNo, bytes, fontHeight) {
+    var width = bytes.length;
+    var model = new GlyphModel(width, fontHeight, String.fromCharCode(lineNo+32));
+
+    for (var col = 0; col < width; col++) {
+        var byte = parseInt(bytes[col]);
+        for (var i = 0; i < fontHeight; i++, byte >>= 1) {
+            var row = model.rows[i];
+            row[col] = (byte & 1) ? true : false;
+        }
+    }
 }
 //var canvas = document.getElementById('capture');
 //var glyph = document.getElementById('glyph');
