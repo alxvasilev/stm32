@@ -9,9 +9,13 @@
 #include <stm32++/common.hpp>
 #include <string.h>
 #include <stm32++/font.hpp>
+#include <algorithm> //for std::swap
 
 /* Absolute value */
 #define ABS(x)   ((x) > 0 ? (x) : -(x))
+
+#define gfx_checkbounds_x(x) if (x > Driver::kWidth) return;
+#define gfx_checkbounds_y(y) if (y > Driver::kHeight) return;
 
 enum Color: bool
 {
@@ -253,10 +257,59 @@ bool puts(const char* str, const F& font)
     return true;
 }
 
+void hLine(uint16_t x1, uint16_t x2, uint16_t y)
+{
+    gfx_checkbounds_x(x1);
+    gfx_checkbounds_x(x2);
+    gfx_checkbounds_y(y);
+
+    if (x2 < x1)
+    {
+        std::swap(x1, x2);
+    }
+    auto pageStart = Driver::mBuf + (y >> 3) * Driver::kWidth;
+    auto start = pageStart + x1;
+    auto end = pageStart + x2;
+    uint8_t mask = 1 << (y % 8);
+    for (auto ptr = start; ptr <= end; ptr++)
+    {
+        *ptr |= mask;
+    }
+}
+void vLine(uint16_t y1, uint16_t y2, uint16_t x)
+{
+    gfx_checkbounds_y(y1);
+    gfx_checkbounds_y(y2);
+    gfx_checkbounds_x(x);
+    if (y1 > y2)
+    {
+        std::swap(y1, y2);
+    }
+    auto page1 = y1 >> 3;
+    auto page2 = y2 >> 3;
+    auto pByte1 = Driver::mBuf + Driver::kWidth * page1 + x;
+    auto pByte2 = Driver::mBuf + Driver::kWidth * page2 + x;
+
+    uint8_t ofs1 = y1 % 8;
+    uint8_t mask1 = 0xff << ofs1;
+
+    uint8_t ofs2 = y2 % 8;
+    uint8_t mask2 = 0xff >> (7 - ofs2);
+    if (page2 == page1) // line starts and ends on same page
+    {
+        *pByte1 |= (mask1 & mask2);
+        return;
+    }
+    *pByte1 |= mask1;
+    *pByte2 |= mask2;
+    for (auto pByte = pByte1 + Driver::kWidth; pByte < pByte2; pByte += Driver::kWidth)
+    {
+        *pByte = 0xff;
+    }
+}
+
 void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 {
-    int16_t dx, dy, sx, sy, err, e2, i, tmp;
-
     /* Check for overflow */
     if (x0 >= Driver::kWidth) {
         x0 = Driver::kWidth - 1;
@@ -271,67 +324,36 @@ void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
         y1 = Driver::kHeight - 1;
     }
 
-    dx = (x0 < x1) ? (x1 - x0) : (x0 - x1);
-    dy = (y0 < y1) ? (y1 - y0) : (y0 - y1);
-    sx = (x0 < x1) ? 1 : -1;
-    sy = (y0 < y1) ? 1 : -1;
-    err = ((dx > dy) ? dx : -dy) / 2;
+    int16_t dx = (x0 < x1) ? (x1 - x0) : (x0 - x1);
+    int16_t dy = (y0 < y1) ? (y1 - y0) : (y0 - y1);
 
-    if (dx == 0) {
-        if (y1 < y0) {
-            tmp = y1;
-            y1 = y0;
-            y0 = tmp;
-        }
-
-        if (x1 < x0) {
-            tmp = x1;
-            x1 = x0;
-            x0 = tmp;
-        }
-
-        /* Vertical line */
-        for (i = y0; i <= y1; i++) {
-            setPixel(x0, i);
-        }
-
-        /* Return from function */
+    if (dx == 0)
+    {
+        vLine(y0, y1, x0);
         return;
     }
 
-    if (dy == 0) {
-        if (y1 < y0) {
-            tmp = y1;
-            y1 = y0;
-            y0 = tmp;
-        }
-
-        if (x1 < x0) {
-            tmp = x1;
-            x1 = x0;
-            x0 = tmp;
-        }
-
-        /* Horizontal line */
-        for (i = x0; i <= x1; i++) {
-            setPixel(i, y0);
-        }
-
-        /* Return from function */
+    if (dy == 0)
+    {
+        hLine(x0, x1, y0);
         return;
     }
 
-    while (1) {
+    int16_t sx = (x0 < x1) ? 1 : -1;
+    int16_t sy = (y0 < y1) ? 1 : -1;
+    int16_t err = ((dx > dy) ? dx : -dy) / 2;
+    for(;;)
+    {
         setPixel(x0, y0);
-        if (x0 == x1 && y0 == y1) {
-            break;
+        if (x0 == x1 && y0 == y1)
+        {
+            return;
         }
-        e2 = err;
-        if (e2 > -dx) {
+        if (err > -dx) {
             err -= dy;
             x0 += sx;
         }
-        if (e2 < dy) {
+        if (err < dy) {
             err += dx;
             y0 += sy;
         }
