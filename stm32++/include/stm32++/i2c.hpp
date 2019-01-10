@@ -149,7 +149,6 @@ bool start(uint8_t address, bool tx, bool ack)
 
 bool sendByteTimeout(uint8_t data)
 {
-//  tprintf("sendByte %\n", fmtNum<16>(data));
     if (!(I2C_SR1(I2C) & I2C_SR1_TxE))
     {
         ElapsedTimer timer;
