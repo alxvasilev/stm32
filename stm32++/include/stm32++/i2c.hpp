@@ -108,8 +108,14 @@ bool start(uint8_t address, bool tx, bool ack)
 {
 	/* Generate I2C start pulse */
     i2c_send_start(I2C);
+    ElapsedTimer timer;
+
     /* Waiting for START to be sent and switched to master mode. */
-    while (!(I2C_SR1(I2C) & I2C_SR1_SB));
+    while (!(I2C_SR1(I2C) & I2C_SR1_SB))
+    {
+        if (timer.msElapsed() > kTimeoutMs)
+            return false;
+    }
     xassert(I2C_SR2(I2C) & I2C_SR2_MSL);
 
     if (ack)
@@ -120,7 +126,6 @@ bool start(uint8_t address, bool tx, bool ack)
     /* Send destination address. */
     i2c_send_7bit_address(I2C, address, tx ? I2C_WRITE : I2C_READ);
 
-    ElapsedTimer timer;
     /* Waiting for address to be transferred. */
     while (!(I2C_SR1(I2C) & I2C_SR1_ADDR))
     {

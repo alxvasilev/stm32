@@ -83,8 +83,7 @@ public:
         /* Check if LCD connected to I2C */
         if (!mIo.isDeviceConnected(mAddr))
             return false;
-        /* A little delay */
-        usDelay(400);
+        /* LCD needs some time after initial power up */
 
         // Init sequence
         cmd(SSD1306_DISPLAYOFF);               // cmd 0xAE

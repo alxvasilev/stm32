@@ -143,6 +143,10 @@ template <int32_t TickCorr=0>
 static inline void msDelay(uint32_t ms) { DwtCounter::delay<1, TickCorr>(ms); }
 
 
+/* Implementation of a 64-bit time counter.
+ * @param Int - implement concurrency guard if used in interrupts. Necessary because
+ * we have internal state that may be updated in the get() method
+*/
 template <bool Int, class T>
 class TimeClockImpl;
 

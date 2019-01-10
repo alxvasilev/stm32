@@ -11,11 +11,11 @@
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/cm3/systick.h>
 
-#include <stm32++/snprint.h>
-#include <stm32++/timeutl.h>
+#include <stm32++/snprint.hpp>
+#include <stm32++/timeutl.hpp>
 #include <stm32++/utils.hpp>
 
-namespace button
+namespace btn
 {
 template <uint32_t Port>
 rcc_periph_clken getPortClock();
@@ -23,9 +23,10 @@ rcc_periph_clken getPortClock();
 /** @brief Button event type */
 enum: uint8_t
 {
- kEventRelease=0, //< Button was released
- kEventPress=1, //< Button was pressed
- kEventRepeat=2 //< Button repeat, generated when the button is held pressed
+    kEventRelease=0, //< Button up
+    kEventPress=1,   //< Button down
+    kEventHold = 2,  //< Button held
+    kEventRepeat = 3 //< Button repeat, generated when the button is held pressed
 };
 /** @brief Option flags. They apply to all pins that the Button
  *  class manages (the APins mask)
@@ -49,7 +50,7 @@ enum: uint8_t
  * @param arg - The user pointer that was passed to the Buttons instance
  * at construction or set via \c setUserp()
  */
-typedef void(*EventCb)(uint8_t btn, uint8_t event, void* userp);
+typedef void(*EventCb)(uint16_t btn, uint8_t event, void* userp);
 
 /** @brief Button handler class
  * There is one methods that has to be called periodically on the
@@ -83,10 +84,11 @@ protected:
     //these are accessed only in the isr, via poll()
     volatile uint16_t mDebouncing = 0;
     volatile uint32_t mDebounceStartTs = 0;
-    volatile uint16_t mLastPollState = GPIO_ODR(Port);
-    //mState and mChaged are shared between the isr and the main thread
-    volatile uint16_t mState = GPIO_ODR(Port);
+    volatile uint16_t mLastPollState;
+    //mState and mChanged are shared between the isr and the main thread
+    volatile uint16_t mState;
     volatile uint16_t mChanged = 0;
+    volatile uint32_t mLastObtainedTs;
     //===
     EventCb mHandler;
     void* mHandlerUserp;
@@ -96,18 +98,33 @@ protected:
          };
     struct RepeatState
     {
-        enum { kDelayPauseInitial = 100, kDelayRepeatInitial = 40 }; //x10 milliseconds
+        enum { kDelayRepeatInitialMs10 = 40 }; //x10 milliseconds
         uint32_t mLastTs;
-        uint8_t mDelayX10;
+        uint8_t mRptStartDelayMs10 = 100; // 1 second by default, can be configured per button
+        uint8_t mTimeToNextMs10;
         uint8_t mRepeatCnt;
     };
     RepeatState mRptStates[kRptCount];
-public:
-    Buttons(EventCb aCb, void* aUserp)
-    : mState(GPIO_IDR(Port)), mHandler(aCb), mHandlerUserp(aUserp)
+    uint32_t ms10ElapsedSince(uint32_t sinceTicks, uint32_t now) // must be called at leat once per ~40 seconds in case of cpu frequency <= 100 MHz
     {
-        static_assert((RepeatPins & ~Pins) == 0);
-        rcc_periph_clock_enable(getPortClock<Port>());
+        if (now > sinceTicks)
+        {
+            return (now - sinceTicks) / (rcc_ahb_frequency / 100);
+        }
+        else // DwtCounter wrap
+        {
+            return (((uint64_t)now + 0xffffffff) - sinceTicks) / (rcc_ahb_frequency / 1000);
+        }
+    }
+public:
+    Buttons() {}
+    void init(EventCb aCb, void* aUserp)
+    {
+        mLastObtainedTs = DwtCounter::get();
+        mHandler = aCb;
+        mHandlerUserp = aUserp;
+    //===
+        static_assert((RepeatPins & ~Pins) == 0, "RepeatPins specifies pins that are not in Pins");
         if ((Flags & kOptNoInternalPuPd) == 0)
         {
             gpio_set_mode(Port, GPIO_MODE_INPUT,
@@ -122,6 +139,8 @@ public:
             gpio_set_mode(Port, GPIO_MODE_INPUT,
                       GPIO_CNF_INPUT_FLOAT, Pins);
         }
+        mState = GPIO_IDR(Port);
+        mLastPollState = mState;
     }
     /** @brief Polls the state of the button pins and queues events
      * for processing by process(). \c poll() is suitable for calling
@@ -129,6 +148,7 @@ public:
      */
     void poll()
     {
+        // may be called from an ISR
         // scan pins and detect changes
         uint16_t newState = GPIO_IDR(Port);
         uint16_t changedPins = (mLastPollState ^ newState) & Pins;
@@ -177,10 +197,10 @@ public:
         for (uint8_t idx=Right0Count<Pins>::value; idx < HighestBitIdx<Pins>::value; idx++)
         {
             uint16_t mask = 1 << idx;
+            uint16_t pinState = state & mask;
             if (changed & mask)
             {
                 uint8_t event;
-                uint16_t pinState = state & mask;
                 if (pinState) //just pressed
                 {
                     event = kEventPress;
@@ -189,7 +209,7 @@ public:
                         // record timestamp for newly pressed repeatable buttons
                         auto& rptState = mRptStates[idx-kRptShift];
                         rptState.mLastTs = now;
-                        rptState.mDelayX10 = RepeatState::kDelayPauseInitial;
+                        rptState.mTimeToNextMs10 = rptState.mRptStartDelayMs10;
                         rptState.mRepeatCnt = 0;
                     }
                 }
@@ -197,48 +217,51 @@ public:
                 {
                     event = kEventRelease;
                 }
-                mHandler(idx, event, mHandlerUserp);
+                mHandler(mask, event, mHandlerUserp);
             }
-            else
+            else // button state didn't change
             {
-                if (!kRptCount) //repeat not enabled
+                if (!kRptCount) //repeat not enabled for any button
                     continue;
-                if (!(state & mask & RepeatPins)) //button does not repeat or not pressed
+                if ((pinState & RepeatPins) == 0) //repeat not enabled for this button, or button not pressed
                     continue;
 
                 auto& rptState = mRptStates[idx-kRptShift];
-                uint32_t ms10 = DwtCounter::ticksTo10Ms(now - rptState.mLastTs);
-                if (ms10 < rptState.mDelayX10)
+                uint32_t ms10 = ms10ElapsedSince(rptState.mLastTs, DwtCounter::get());
+                if (ms10 < rptState.mTimeToNextMs10)
                     continue; //too early for repeat
 
                 rptState.mLastTs = now;
-                if (rptState.mDelayX10 == RepeatState::kDelayPauseInitial)
+                if (rptState.mTimeToNextMs10 == rptState.mRptStartDelayMs10)
                 {
-                    rptState.mDelayX10 = RepeatState::kDelayRepeatInitial;
+                    // we just completed the initial delay, switch to repeat
+                    // by setting the repeat delay as the new target
+                    rptState.mTimeToNextMs10 = RepeatState::kDelayRepeatInitialMs10;
                     rptState.mRepeatCnt = 0;
+                    mHandler(mask, kEventHold, mHandlerUserp);
                 }
-                else
+                else // repeat mode
                 {
-                    uint16_t dur = (++rptState.mRepeatCnt) * rptState.mDelayX10;
+                    // Calculate how much time we have spent at this repeat frequency
+                    uint16_t dur = (++rptState.mRepeatCnt) * rptState.mTimeToNextMs10;
                     if (dur > 150)
                     {
-                        if (rptState.mDelayX10 > 2)
+                        if (rptState.mTimeToNextMs10 > 2)
                         {
-                           rptState.mDelayX10 -= 1;
+                           rptState.mTimeToNextMs10 -= 1;
                            rptState.mRepeatCnt = 0;
                         }
                     }
                     else if (dur > 70)
                     {
-                        if (rptState.mDelayX10 >= 10)
+                        if (rptState.mTimeToNextMs10 >= 10)
                         {
-                           rptState.mDelayX10 >>= 1;
+                           rptState.mTimeToNextMs10 >>= 1;
                            rptState.mRepeatCnt = 0;
                         }
                     }
-
+                    mHandler(mask, kEventRepeat, mHandlerUserp);
                 }
-                mHandler(idx, kEventRepeat, mHandlerUserp);
             }
         }
     }
@@ -248,12 +271,22 @@ public:
         mHandler = h;
         mHandlerUserp = userp;
     }
+    void setHoldDelayFor(uint16_t pin, uint16_t timeMs)
+    {
+        assert(pin & ARpt);
+        uint8_t idx = 0;
+        for (; idx < 16; idx++)
+        {
+            if ((1 << idx) == pin)
+                break;
+        }
+        idx -= kRptShift;
+        auto& state = mRptStates[idx];
+        state.mRptStartDelayMs10 = (timeMs + 5) / 10;
+    }
     /** @brief Sets the user pointer that is passed to the event handler */
     void setHandlerUserp(void* userp) { mHandlerUserp = userp; }
 };
-template <> rcc_periph_clken getPortClock<GPIOA>() { return RCC_GPIOA; }
-template <> rcc_periph_clken getPortClock<GPIOB>() { return RCC_GPIOB; }
-template <> rcc_periph_clken getPortClock<GPIOC>() { return RCC_GPIOC; }
 }
 
 /*
