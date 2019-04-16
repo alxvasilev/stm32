@@ -25,8 +25,8 @@ struct PeriphInfo<USART1>
         kDmaRxChannel = DMA_CHANNEL5,
         kDmaWordSize = 1
     };
-    static constexpr uint32_t kDmaRxDataRegister = (uint32_t)(&USART1_DR);
-    static constexpr uint32_t kDmaTxDataRegister = (uint32_t)(&USART1_DR);
+    static const uint32_t dmaRxDataRegister() { return (uint32_t)(&USART1_DR); }
+    static const uint32_t dmaTxDataRegister() { return (uint32_t)(&USART1_DR); }
 #ifndef NDEBUG
     static constexpr const char* periphName() { return "usart1"; }
 #endif
@@ -44,8 +44,8 @@ struct PeriphInfo<USART2>
         kDmaRxChannel = DMA_CHANNEL6,
         kDmaWordSize = 1
     };
-    static constexpr uint32_t kDmaRxDataRegister = (uint32_t)(&USART2_DR);
-    static constexpr uint32_t kDmaTxDataRegister = (uint32_t)(&USART2_DR);
+    static const uint32_t dmaRxDataRegister() { return (uint32_t)(&USART2_DR); }
+    static const uint32_t dmaTxDataRegister() { return (uint32_t)(&USART2_DR); }
 #ifndef NDEBUG
     static constexpr const char* periphName() { return "usart2"; }
 #endif
@@ -62,8 +62,8 @@ struct PeriphInfo<USART3>
         kDmaRxChannel = DMA_CHANNEL3,
         kDmaWordSize = 1
     };
-    static constexpr uint32_t kDmaRxDataRegister = (uint32_t)(&USART3_DR);
-    static constexpr uint32_t kDmaTxDataRegister = (uint32_t)(&USART3_DR);
+    static const uint32_t dmaRxDataRegister() { return (uint32_t)(&USART3_DR); }
+    static const uint32_t dmaTxDataRegister() { return (uint32_t)(&USART3_DR); }
 #ifndef NDEBUG
     static constexpr const char* periphName() { return "usart3"; }
 #endif

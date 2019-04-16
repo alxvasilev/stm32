@@ -344,8 +344,8 @@ struct PeriphInfo<I2C1>
         kDmaRxChannel = DMA_CHANNEL7,
         kDmaWordSize = 1
     };
-    static constexpr uint32_t kDmaRxDataRegister = (uint32_t)(&I2C1_DR);
-    static constexpr uint32_t kDmaTxDataRegister = (uint32_t)(&I2C1_DR);
+    static const uint32_t dmaRxDataRegister() { return (uint32_t)(&I2C1_DR); }
+    static const uint32_t dmaTxDataRegister() { return (uint32_t)(&I2C1_DR); }
 #ifndef NDEBUG
     static constexpr const char* periphName() { return "i2c1"; }
 #endif
@@ -361,8 +361,8 @@ struct PeriphInfo<I2C2>
         kDmaRxChannel = DMA_CHANNEL5,
         kDmaWordSize = 1
     };
-    static constexpr uint32_t kDmaTxDataRegister =(uint32_t)(&I2C2_DR);
-    static constexpr uint32_t kDmaRxDataRegister =(uint32_t)(&I2C2_DR);
+    static const uint32_t dmaTxDataRegister() { return (uint32_t)(&I2C2_DR); }
+    static const uint32_t dmaRxDataRegister() { return (uint32_t)(&I2C2_DR); }
 #ifndef NDEBUG
     static constexpr const char* periphName() { return "i2c1"; }
 #endif

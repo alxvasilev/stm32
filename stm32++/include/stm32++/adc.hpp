@@ -406,7 +406,8 @@ template<>
 struct PeriphInfo<ADC1>
 {
     static constexpr rcc_periph_clken kClockId = RCC_ADC1;
-    enum: uint32_t { kDmaRxId = DMA1, kDmaRxDataRegister = (uint32_t)(&ADC1_DR) };
+    enum: uint32_t { kDmaRxId = DMA1 };
+    static const uint32_t dmaRxDataRegister() { return (uint32_t)(&ADC1_DR); }
     enum: uint8_t { kDmaRxChannel = DMA_CHANNEL1, kDmaWordSize = 2 };
     static constexpr rcc_periph_rst kResetBit = RST_ADC1;
 #ifndef NDEBUG
@@ -432,7 +433,8 @@ struct PeriphInfo<ADC3>
     static constexpr const char* periphName() { return "adc3"; }
 #endif
     static constexpr rcc_periph_clken kClockId = RCC_ADC3;
-    enum: uint32_t { kDmaRxId = DMA2, kDmaRxDataRegister = (uint32_t)(&ADC3_DR) };
+    enum: uint32_t { kDmaRxId = DMA2 };
+    static const uint32_t dmaRxDataRegister() { return (uint32_t)(&ADC3_DR); }
     enum: uint8_t { kDmaRxChannel = DMA_CHANNEL5, kDmaWordSize = 2 };
     static constexpr rcc_periph_rst kResetBit = RST_ADC3;
 };

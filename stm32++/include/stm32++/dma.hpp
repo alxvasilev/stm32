@@ -105,7 +105,7 @@ public:
         }
 
         dma_channel_reset(dma, chan);
-        dma_set_peripheral_address(dma, chan, Base::kDmaTxDataRegister);
+        dma_set_peripheral_address(dma, chan, Base::dmaTxDataRegister());
         dma_set_peripheral_size(dma, chan, periphSizeCode(Self::kDmaWordSize));
         dma_disable_peripheral_increment_mode(dma, chan);
 
@@ -219,7 +219,7 @@ public:
 
         dma_disable_channel(dma, chan);
         dma_channel_reset(dma, chan);
-        dma_set_peripheral_address(dma, chan, (uint32_t)Base::kDmaRxDataRegister);
+        dma_set_peripheral_address(dma, chan, (uint32_t)Base::dmaRxDataRegister());
         dma_set_peripheral_size(dma, chan, periphSizeCode(Base::kDmaWordSize));
         dma_disable_peripheral_increment_mode(dma, chan);
 
