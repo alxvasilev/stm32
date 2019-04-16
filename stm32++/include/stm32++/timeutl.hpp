@@ -14,8 +14,9 @@ class DwtCounter
 public:
     typedef uint32_t Word;
     static volatile uint32_t get() { return (volatile uint32_t)DWT_CYCCNT; }
+    static volatile uint32_t ticks() { return (volatile uint32_t)DWT_CYCCNT; }
 
-    template <class W=uint64_t>
+    template <class W=int64_t>
     static W ticksToNs(W ticks)
     { return (ticks * 1000) / (rcc_ahb_frequency/1000000); }
 
@@ -66,24 +67,6 @@ protected:
 #endif
 };
 
-template <class T = DwtCounter>
-class GenericElapsedTimer: public T
-{
-protected:
-    volatile typename T::Word mStart;
-public:
-    GenericElapsedTimer(): mStart(T::get()){}
-    volatile void reset() { mStart = T::get(); }
-    uint32_t tsStart() const { return mStart; }
-    volatile uint32_t ticksElapsed() const
-    { //compensate for our own one cycle overhead
-        return T::get() - mStart - 1;
-    }
-    volatile uint32_t nsElapsed() { return T::ticksToNs(ticksElapsed()); }
-    volatile uint32_t usElapsed() { return T::ticksToUs(ticksElapsed()); }
-    volatile uint32_t msElapsed() { return T::ticksToMs(ticksElapsed()); }
-};
-typedef GenericElapsedTimer<DwtCounter> ElapsedTimer;
 // Should never be actually instantiated with negative values,
 // but satisfies compiler checks.
 template <int32_t Count>
@@ -142,50 +125,43 @@ void usDelay(uint32_t us) { DwtCounter::delay<1000, TickCorr>(us); }
 template <int32_t TickCorr=0>
 static inline void msDelay(uint32_t ms) { DwtCounter::delay<1, TickCorr>(ms); }
 
-
-/* Implementation of a 64-bit time counter.
- * @param Int - implement concurrency guard if used in interrupts. Necessary because
- * we have internal state that may be updated in the get() method
+/* 64-bit timestamp clock. Uses T as the actual time source, and implements
+ * wrapping protection
+ * @param Int - whether to implement concurrency guard if used in interrupts.
+ * Necessary because we have internal state that may be updated in the get()
+ * method
 */
 template <bool Int, class T>
-class TimeClockImpl;
-
-template <bool Int=false, class T=DwtCounter>
-class TimeClock: public TimeClockImpl<Int, T>
-{
-protected:
-    typedef TimeClockImpl<Int, T> Base;
-    using T::get;
-public:
-    uint64_t nanotime() { return T::ticksToNs(this->ticks()); }
-    uint64_t microtime() { return T::ticksToUs(this->ticks()); }
-    uint64_t millitime() { return T::ticksToMs(this->ticks()); }
-};
+class TimeClockNoWrap;
 
 template <class T>
-class TimeClockImpl<false, T>: public T
+class TimeClockNoWrap<false, T>: public T
 {
     typename T::Word mHighWord = 0;
     typename T::Word mLastCount;
 protected:
-    TimeClockImpl(): mLastCount(T::get()){}
+    using T::get; // hide the get() method if the original source
 public:
-    uint64_t ticks()
+    TimeClockNoWrap(): mLastCount(T::get()){}
+    int64_t nanotime() { return T::ticksToNs(this->ticks()); }
+    int64_t microtime() { return T::ticksToUs(this->ticks()); }
+    int64_t millitime() { return T::ticksToMs(this->ticks()); }
+    int64_t ticks()
     {
         typename T::Word now = T::get();
         if (now < mLastCount)
             mHighWord++;
         mLastCount = now;
-        return ((uint64_t)mHighWord << (sizeof(typename T::Word)*8)) | now;
+        return ((int64_t)mHighWord << (sizeof(typename T::Word)*8)) | now;
     }
 };
 
 template <class T>
-class TimeClockImpl<true, T>: public TimeClockImpl<false, T>
+class TimeClockNoWrap<true, T>: public TimeClockNoWrap<false, T>
 {
-    typedef TimeClockImpl<false, T> Base;
+    typedef TimeClockNoWrap<false, T> Base;
 public:
-    uint64_t ticks()
+    int64_t ticks()
     {
         bool disabled = cm_is_masked_interrupts();
         if (disabled)
@@ -194,10 +170,32 @@ public:
         }
 
         cm_disable_interrupts();
-        uint64_t result = Base::ticks();
+        int64_t result = Base::ticks();
         cm_enable_interrupts();
         return result;
     }
 };
+
+/* Class to measure elapsed time
+ * T is the timestamp source
+ */
+template <class T = TimeClockNoWrap<false, DwtCounter> >
+class GenericElapsedTimer: public T
+{
+protected:
+    volatile int64_t mStart;
+public:
+    GenericElapsedTimer(): mStart(T::ticks()){}
+    volatile void reset() { mStart = T::ticks(); }
+    int64_t tsStart() const { return mStart; }
+    volatile int64_t ticksElapsed()
+    { //compensate for our own one cycle overhead
+        return T::ticks() - mStart - 18;
+    }
+    volatile int64_t nsElapsed() { return T::ticksToNs(ticksElapsed()); }
+    volatile int64_t usElapsed() { return T::ticksToUs(ticksElapsed()); }
+    volatile int64_t msElapsed() { return T::ticksToMs(ticksElapsed()); }
+};
+typedef GenericElapsedTimer<> ElapsedTimer;
 
 #endif

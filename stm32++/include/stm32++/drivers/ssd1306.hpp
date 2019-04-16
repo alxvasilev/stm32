@@ -69,7 +69,6 @@ protected:
     uint8_t mAddr;
     constexpr static uint16_t mkType(uint8_t w, uint8_t h) { return (w << 8) | h; }
 public:
-    enum: uint16_t { kWidth = W, kHeight = H };
     enum: uint16_t {
         kType = mkType(W, H),
         SSD1306_128_32 = mkType(128, 32),
@@ -77,6 +76,8 @@ public:
         SSD1306_96_16 = mkType(96,16)
     };
     uint8_t* rawBuf() { return mBuf; }
+    static uint16_t width() { return W; }
+    static uint16_t height() { return H; }
     SSD1306_Driver(IO& intf, uint8_t addr=0x3C): mIo(intf), mAddr(addr) {}
     bool init()
     {

@@ -117,7 +117,6 @@ public:
             nvic_set_priority(kDmaTxIrq, (Opts & kIrqPrioMask) >> kIrqPrioShift);
             DMA_LOG_DEBUG("Tx: Enabled transfer complete interrupt");
         }
-
     }
     /** @brief Initiates a DMA transfer of the buffer specified
      * by the \c data and \c size paremeters.
@@ -178,6 +177,15 @@ public:
         }
         mTxBuf = nullptr;
         mTxBusy = false;
+    }
+    static void dmaPrintSink(const char* str, size_t len, int fd, void* userp)
+    {
+        auto& self = *static_cast<Self*>(userp);
+        self.dmaTxStart((const void*)str, len, tprintf_free);
+    }
+    void setDmaPrintSink()
+    {
+        ::setPrintSink(dmaPrintSink, this, kPrintSinkLeaveBuffer);
     }
 };
 /** Mixin to support Rx DMA. Base is derived from DmaInfo<Periph>,

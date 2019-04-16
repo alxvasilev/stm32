@@ -14,8 +14,8 @@
 /* Absolute value */
 #define ABS(x)   ((x) > 0 ? (x) : -(x))
 
-#define gfx_checkbounds_x(x) if (x > Driver::kWidth) return;
-#define gfx_checkbounds_y(y) if (y > Driver::kHeight) return;
+#define gfx_checkbounds_x(x) if (x > Driver::width()) return;
+#define gfx_checkbounds_y(y) if (y > Driver::height()) return;
 
 enum Color: bool
 {
@@ -38,9 +38,14 @@ protected:
     uint16_t mCurrentY = 0;
     uint8_t mState = kFontHspace2;
     Color mColor = kColorWhite;
+    const Font* mFont = nullptr;
 public:
     void setDrawColor(Color aColor) { mColor = aColor; }
     Color drawColor() const { return mColor; }
+    void setFont(Font& font) { mFont = &font; }
+    const Font& font() const { return *mFont; }
+    uint8_t charSpacing() const { return mState & kFontHspaceMask; }
+    uint8_t charWidthWithSpacing() const { return mFont->width + charSpacing(); }
     bool isInverted() const { return mState & kStateInverted; }
     template <class IO, typename... Args>
     DisplayGfx(IO& intf, Args... args): Driver(intf, args...){}
@@ -51,13 +56,12 @@ bool init()
         return false;
     }
     /* Clear screen */
-    fill(kColorBlack);
+    fill(isInverted() ? kColorWhite : kColorBlack);
     /* Update screen */
     Driver::updateScreen();
     /* Initialized OK */
     return true;
 }
-
 void toggleInvert(void)
 {
     if (mColor)
@@ -77,12 +81,16 @@ void fill(Color color)
     /* Set memory */
     memset(Driver::rawBuf(), (color == kColorBlack) ? 0x00 : 0xFF, Driver::kBufSize);
 }
+void clear()
+{
+    fill(kColorBlack);
+}
 template <bool Check = true>
 void setPixel(uint16_t x, uint16_t y)
 {
     if (Check)
     {
-        if (x >= Driver::kWidth || y >= Driver::kHeight)
+        if (x >= Driver::width() || y >= Driver::height())
         {
             /* Error */
             //tprintf("out of range\n");
@@ -92,9 +100,9 @@ void setPixel(uint16_t x, uint16_t y)
 
     /* Set color */
     if (mColor) {
-        Driver::mBuf[x + (y >> 3) * Driver::kWidth] |= 1 << (y % 8);
+        Driver::mBuf[x + (y >> 3) * Driver::width()] |= 1 << (y % 8);
     } else {
-        Driver::mBuf[x + (y >> 3) * Driver::kWidth] &= ~(1 << (y % 8));
+        Driver::mBuf[x + (y >> 3) * Driver::width()] &= ~(1 << (y % 8));
     }
 }
 
@@ -105,38 +113,39 @@ void gotoXY(uint16_t x, uint16_t y)
     mCurrentY = y;
 }
 
-uint8_t putc(char ch, const Font& font)
+uint8_t putc(char ch)
 {
-    uint8_t fontW = font.width;
-    uint8_t symPages = (font.height+7)/8;
+    xassert(mFont);
+    uint8_t fontW = mFont->width;
+    uint8_t symPages = (mFont->height + 7) / 8;
     uint8_t symLastPage = symPages - 1;
-    const uint8_t* sym = font.data + (ch - 32) * fontW * symPages;
-    uint8_t* bufDest = Driver::mBuf + (mCurrentY >> 3) * Driver::kWidth + mCurrentX; //(ypos div 8) * width + xpos
+    const uint8_t* sym = mFont->data + (ch - 32) * fontW * symPages;
+    uint8_t* bufDest = Driver::mBuf + (mCurrentY >> 3) * Driver::width() + mCurrentX; //(ypos div 8) * width + xpos
 
     uint8_t writeWidth;
-    if (mCurrentX + fontW < Driver::kWidth)
+    if (mCurrentX + fontW < Driver::width())
     {
         writeWidth = fontW;
     }
     else
     {
-        if (mCurrentX >= Driver::kWidth)
+        if (mCurrentX >= Driver::width())
         {
             return 0;
         }
-        writeWidth = Driver::kWidth - mCurrentX;
+        writeWidth = Driver::width() - mCurrentX;
     }
     uint8_t vOfs = (mCurrentY % 8); //offset within the vertical byte
     if (vOfs == 0)
     {
         for (int page = 0; page <= symLastPage; page++)
         {
-            uint8_t* dest = bufDest+page*Driver::kWidth;
+            uint8_t* dest = bufDest+page*Driver::width();
             const uint8_t* src = sym+page*fontW;
             const uint8_t* srcEnd = src+writeWidth;
             uint8_t wmask = (page < symLastPage)
                 ? 0xff
-                : 0xff >> (8 - font.height);
+                : 0xff >> (8 - mFont->height);
 
             for (; src < srcEnd; src++, dest++)
             {
@@ -148,9 +157,9 @@ uint8_t putc(char ch, const Font& font)
     {
         uint8_t displayFirstPageHeight = 8 - vOfs; // write height of first display page
         uint8_t firstLineFullMask = 0xff << vOfs; //masks the bits above the draw line
-        bool onlyFirstLine = font.height <= displayFirstPageHeight;
+        bool onlyFirstLine = mFont->height <= displayFirstPageHeight;
         uint8_t wmask = onlyFirstLine //write mask
-             ? ((1 << font.height)-1) << vOfs //the font doesn't span to line bottom, if font height is small
+             ? ((1 << mFont->height) - 1) << vOfs //the font doesn't span to line bottom, if font height is small
              : firstLineFullMask; //font spans to bottom of line
         uint8_t* wptr = bufDest; //write pointer
         uint8_t* wend = wptr+writeWidth;
@@ -178,10 +187,10 @@ uint8_t putc(char ch, const Font& font)
 
         uint8_t wpage = 1;
         uint8_t secondPageMask = 0xff << displayFirstPageHeight; // low vOfs bits set
-        uint8_t symLastPageHeight = font.height % 8;
+        uint8_t symLastPageHeight = mFont->height % 8;
         if (symLastPageHeight == 0)
         {
-            symLastPageHeight = font.height;
+            symLastPageHeight = mFont->height;
         }
         uint8_t symLastPageToFirstDisplayPageMask;
         uint8_t symLastPageToSecondDisplayPageMask;
@@ -195,7 +204,7 @@ uint8_t putc(char ch, const Font& font)
             symLastPageToFirstDisplayPageMask = firstLineFullMask & (0xff >> (8-symLastPageHeight));
             symLastPageToSecondDisplayPageMask = 0x00;
         }
-        wptr = bufDest+wpage*Driver::kWidth;
+        wptr = bufDest+wpage*Driver::width();
         wend = wptr+writeWidth;
         assert(wend <= Driver::mBuf + Driver::kBufSize);
 
@@ -230,7 +239,7 @@ uint8_t putc(char ch, const Font& font)
                         : ((~*(rptr++) << vOfs));
                     b = (b & ~wmask) | srcByte;
                     wpage++;
-                    wptr = bufDest +wpage * Driver::kWidth;
+                    wptr = bufDest +wpage * Driver::width();
                     wend = wptr + writeWidth;
                     assert(wend <= Driver::mBuf+Driver::kBufSize);
                 }
@@ -241,13 +250,12 @@ uint8_t putc(char ch, const Font& font)
     return writeWidth;
 }
 
-template <class F>
-bool puts(const char* str, const F& font)
+bool puts(const char* str)
 {
     while (*str)
     {
         /* Write character by character */
-        auto writeWidth = putc(*str, font);
+        auto writeWidth = putc(*str);
         if (!writeWidth) {
             return false;
         }
@@ -267,7 +275,7 @@ void hLine(uint16_t x1, uint16_t x2, uint16_t y)
     {
         std::swap(x1, x2);
     }
-    auto pageStart = Driver::mBuf + (y >> 3) * Driver::kWidth;
+    auto pageStart = Driver::mBuf + (y >> 3) * Driver::width();
     auto start = pageStart + x1;
     auto end = pageStart + x2;
     uint8_t mask = 1 << (y % 8);
@@ -287,8 +295,8 @@ void vLine(uint16_t y1, uint16_t y2, uint16_t x)
     }
     auto page1 = y1 >> 3;
     auto page2 = y2 >> 3;
-    auto pByte1 = Driver::mBuf + Driver::kWidth * page1 + x;
-    auto pByte2 = Driver::mBuf + Driver::kWidth * page2 + x;
+    auto pByte1 = Driver::mBuf + Driver::width() * page1 + x;
+    auto pByte2 = Driver::mBuf + Driver::width() * page2 + x;
 
     uint8_t ofs1 = y1 % 8;
     uint8_t mask1 = 0xff << ofs1;
@@ -302,7 +310,7 @@ void vLine(uint16_t y1, uint16_t y2, uint16_t x)
     }
     *pByte1 |= mask1;
     *pByte2 |= mask2;
-    for (auto pByte = pByte1 + Driver::kWidth; pByte < pByte2; pByte += Driver::kWidth)
+    for (auto pByte = pByte1 + Driver::width(); pByte < pByte2; pByte += Driver::width())
     {
         *pByte = 0xff;
     }
@@ -311,17 +319,17 @@ void vLine(uint16_t y1, uint16_t y2, uint16_t x)
 void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 {
     /* Check for overflow */
-    if (x0 >= Driver::kWidth) {
-        x0 = Driver::kWidth - 1;
+    if (x0 >= Driver::width()) {
+        x0 = Driver::width() - 1;
     }
-    if (x1 >= Driver::kWidth) {
-        x1 = Driver::kWidth - 1;
+    if (x1 >= Driver::width()) {
+        x1 = Driver::width() - 1;
     }
-    if (y0 >= Driver::kHeight) {
-        y0 = Driver::kHeight - 1;
+    if (y0 >= Driver::height()) {
+        y0 = Driver::height() - 1;
     }
-    if (y1 >= Driver::kHeight) {
-        y1 = Driver::kHeight - 1;
+    if (y1 >= Driver::height()) {
+        y1 = Driver::height() - 1;
     }
 
     int16_t dx = (x0 < x1) ? (x1 - x0) : (x0 - x1);
@@ -364,19 +372,19 @@ void drawRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t c)
 {
     /* Check input parameters */
     if (
-        x >= Driver::kWidth ||
-        y >= Driver::kHeight
+        x >= Driver::width() ||
+        y >= Driver::height()
     ) {
         /* Return error */
         return;
     }
 
     /* Check width and height */
-    if ((x + w) >= Driver::kWidth) {
-        w = Driver::kWidth - x;
+    if ((x + w) >= Driver::width()) {
+        w = Driver::width() - x;
     }
-    if ((y + h) >= Driver::kHeight) {
-        h = Driver::kHeight - y;
+    if ((y + h) >= Driver::height()) {
+        h = Driver::height() - y;
     }
 
     /* Draw 4 lines */
@@ -392,19 +400,19 @@ void drawFilledRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 
     /* Check input parameters */
     if (
-        x >= Driver::kWidth ||
-        y >= Driver::kHeight
+        x >= Driver::width() ||
+        y >= Driver::height()
     ) {
         /* Return error */
         return;
     }
 
     /* Check width and height */
-    if ((x + w) >= Driver::kWidth) {
-        w = Driver::kWidth - x;
+    if ((x + w) >= Driver::width()) {
+        w = Driver::width() - x;
     }
-    if ((y + h) >= Driver::kHeight) {
-        h = Driver::kHeight - y;
+    if ((y + h) >= Driver::height()) {
+        h = Driver::height() - y;
     }
 
     /* Draw lines */

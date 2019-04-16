@@ -16,4 +16,20 @@ template <typename C> struct ClassName {                               \
     template <typename> static uint8_t check(...);                     \
     static bool const value = sizeof(check<C>(0)) == sizeof(uint16_t); \
 };
+
+template<>
+struct PeriphInfo<GPIOA> { static constexpr rcc_periph_clken kClockId = RCC_GPIOA; };
+template<>
+struct PeriphInfo<GPIOB> { static constexpr rcc_periph_clken kClockId = RCC_GPIOB; };
+template<>
+struct PeriphInfo<GPIOC> { static constexpr rcc_periph_clken kClockId = RCC_GPIOC; };
+template<>
+struct PeriphInfo<GPIOD> { static constexpr rcc_periph_clken kClockId = RCC_GPIOD; };
+template<>
+struct PeriphInfo<GPIOE> { static constexpr rcc_periph_clken kClockId = RCC_GPIOE; };
+template<>
+struct PeriphInfo<GPIOF> { static constexpr rcc_periph_clken kClockId = RCC_GPIOF; };
+template<>
+struct PeriphInfo<GPIOG> { static constexpr rcc_periph_clken kClockId = RCC_GPIOG; };
+
 #endif // COMMON_HPP
