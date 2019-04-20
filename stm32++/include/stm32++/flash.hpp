@@ -2,9 +2,13 @@
 #define FLASH_HPP_INCLUDED
 
 #include <stddef.h>
+#include <stdint.h>
 
 template <typename T> bool addressIsEven(T* addr)
 { return ((((size_t)addr) & 0x1) == 0); }
+
+template <typename T>
+static inline uint16_t roundToNextEven(T x) { return ((uint16_t)x + 1) & (~0x1); }
 
 #ifdef __arm__
 #include <libopencm3/stm32/flash.h>
@@ -126,8 +130,7 @@ struct DefaultFlashDriver
 };
 #else
 // x86, test mode
-#include <stdlib.h>
-#include <stdint.h>
+#include <stddef.h> // for size_t
 #include <assert.h>
 #include <memory.h>
 #include <stdio.h>
@@ -156,7 +159,7 @@ struct DefaultFlashDriver
     static void clearStatusFlags() {}
     static bool erasePage(uint8_t* page)
     {
-        memset(page, pageSize(), 0xff);
+        memset(page, 0xff, pageSize());
         return true;
     }
 };
@@ -208,7 +211,7 @@ struct FlashPageInfo
             if (*ptr != 0xff)
             {
                 ptr++;
-                return addressIsEven(ptr) ? nullptr : ptr;
+                return addressIsEven(ptr) ? ptr : nullptr;
             }
         }
         // page is completely empty
@@ -232,8 +235,6 @@ protected:
     uint16_t mReserveBytes;
     friend PageInfo;
 public:
-    template <typename T>
-    static inline T roundToNextEven(T x) { return (x + 1) & (~0x1); }
     bool init(size_t page1Addr, size_t page2Addr, uint16_t reserveBytes=0)
     {
         assert(page1Addr % 4 == 0);
@@ -253,7 +254,11 @@ public:
                 {
                     if (info1.pageCtr == info2.pageCtr)
                     {
-                        FLASH_LOG_WARNING("FlashValueStore: Both pages have the same erase counter, using page1");
+                        FLASH_LOG_WARNING("init: Both pages are valid, and have the same counter, using page1");
+                    }
+                    else
+                    {
+                        FLASH_LOG_DEBUG("init: Both pages are valid, but page1 has bigger counter, using it");
                     }
                     mActivePage = info1.page;
                     mDataEnd = info1.dataEnd;
@@ -262,12 +267,14 @@ public:
                 {
                     mActivePage = info2.page;
                     mDataEnd = info2.dataEnd;
+                    FLASH_LOG_DEBUG("init: Both pages are valid, but page2 has bigger counter, using it");
                 }
             }
             else // page1 valid, page2 invalid
             {
                 mActivePage = info1.page;
                 mDataEnd = info1.dataEnd;
+                FLASH_LOG_DEBUG("init: Page1 is valid, pages is invalid, using page1");
             }
         }
         else // page1 invalid
@@ -276,6 +283,7 @@ public:
             {
                 mActivePage = info2.page;
                 mDataEnd = info2.dataEnd;
+                FLASH_LOG_DEBUG("init: Page2 is valid, page1 is invalid, using page2");
             }
             else // both pages invalid
             {
@@ -356,6 +364,7 @@ public:
             {
                 return false;
             }
+            FLASH_LOG_DEBUG("Compacted to %d bytes\n", Driver::pageSize()-pageBytesFree());
             bytesFree = pageBytesFree();
             if (bytesNeeded > bytesFree)
             {
@@ -388,7 +397,7 @@ public:
             }
             // write last (odd) data byte and a zero padding byte
             ok &= Driver::write16(mDataEnd, ((uint8_t*)data)[even]);
-            mDataEnd += 2;
+            mDataEnd += 4; // 1 word with last odd and padding byte, and length+key
         }
         auto err = Driver::errorFlags();
         if (err)
@@ -405,8 +414,7 @@ protected:
      */
     static bool verifyAllEntries(uint8_t* dataEnd, uint8_t* page)
     {
-        uint8_t* ptr = dataEnd; // equal to mActivePage if page is empty
-        while (ptr > page)
+        for (uint8_t* ptr = dataEnd;;) // equal to mActivePage if page is empty
         {
             if (*(ptr - 1) == 0xff) // key can't be 0xff
             {
@@ -414,17 +422,15 @@ protected:
                 return false;
             }
             ptr = getPrevEntryEnd(ptr, page);
+            if (!ptr)
+            {
+                return true;
+            }
             if (ptr == (uint8_t*)-1)
             {
                 return false;
             }
         }
-        if (ptr != page)
-        {
-            FLASH_LOG_ERROR("verifyAllEntries: backward scan did not end at page start");
-            return false;
-        }
-        return true;
     }
 
     /**
@@ -435,7 +441,7 @@ protected:
     static uint8_t* getPrevEntryEnd(uint8_t* entryEnd, uint8_t* page)
     {
          // data.len [align.1] len.1 key.1
-        if (entryEnd - page < 2)
+        if (entryEnd < page + 2)
         {
             if (entryEnd == page)
             {
@@ -450,7 +456,7 @@ protected:
         uint8_t len = *(entryEnd - 2);
         // if len is odd, round it to the next even number, i.e. we have an extra
         // padding byte after the data, if len is odd
-        auto ret = entryEnd - 2 + roundToNextEven(len);
+        auto ret = entryEnd - 2 - roundToNextEven(len);
         if (ret < page)
         {
             FLASH_LOG_ERROR("getPrevEntryEnd: provided entry spans before page start");
@@ -509,13 +515,14 @@ protected:
         }
         writePageCtrAndMagic(mActivePage, PageInfo::getPageCounter(srcPage) + 1);
         // Done writing compacted page to the new page
+        return true;
     }
 };
 template <class Driver>
 FlashPageInfo<Driver>::FlashPageInfo(uint8_t* aPage)
     : page(aPage), pageCtr(getPageCounter(page))
 {
-    if (memcmp(page-kMagicLen, magic(), kMagicLen) != 0)
+    if (memcmp(page + Driver::pageSize() -kMagicLen, magic(), kMagicLen) != 0)
     {
         validateError = kErrMagic;
         return;
