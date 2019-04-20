@@ -138,11 +138,9 @@ struct DefaultFlashDriver
     class WriteUnlocker
     { WriteUnlocker(uint8_t* addr){} };
     enum: uint32_t { kFlashWriteErrorFlags = 0x1 };
-    static uint8_t* gWritePage;
     static uint16_t pageSize() { return 1024; }
     static bool write16(uint8_t* addr, uint16_t data)
     {
-        FLASH_LOG("write16 at offset %zu", addr-gWritePage);
         *((uint16_t*)addr) = data;
         return true;
     }
@@ -231,7 +229,7 @@ protected:
     uint8_t* mActivePage = nullptr;
     uint8_t* mDataEnd;
     uint16_t mReserveBytes;
-    friend PageInfo; //struct FlashPageInfo<Driver>;
+    friend PageInfo;
 public:
     template <typename T>
     static inline T roundToNextEven(T x) { return (x + 1) & (~0x1); }
