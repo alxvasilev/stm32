@@ -1,12 +1,16 @@
 #ifndef FLASH_HPP_INCLUDED
 #define FLASH_HPP_INCLUDED
 
+#include <stddef.h>
+
+template <typename T> bool addressIsEven(T* addr)
+{ return ((((size_t)addr) & 0x1) == 0); }
+
 #ifdef __arm__
 #include <libopencm3/stm32/flash.h>
 
 #define FLASH_LOG(fmtString,...) tprintf("FLASH: " fmtString "\n", ##__VA_ARGS__)
 
-typedef uint32_t Addr;
 struct DefaultFlashDriver
 {
     class WriteUnlocker
@@ -17,8 +21,8 @@ struct DefaultFlashDriver
         bool isLocked() const { return (FLASH_CR & FLASH_CR_LOCK) != 0; }
         bool isUpperLocked() const { return (FLASH_CR2 & FLASH_CR_LOCK) != 0; }
     public:
-        WriteUnlocker(Addr page)
-        : isUpperBank((DESIG_FLASH_SIZE > 512) && (page >= FLASH_BASE+0x00080000))
+        WriteUnlocker(void* page)
+        : isUpperBank((DESIG_FLASH_SIZE > 512) && ((size_t)page >= FLASH_BASE+0x00080000))
         {
             if (isUpperBank)
             {
@@ -63,13 +67,13 @@ struct DefaultFlashDriver
         static const uint16_t flashPageSize = DESIG_FLASH_SIZE << 10;
         return flashPageSize;
     }
-    bool write16(Addr addr, uint16_t data)
+    bool write16(uint8_t* addr, uint16_t data)
     {
-        assert((addr & 0x1) == 0);
+        assert(addressIsEven(addr));
         flash_program_half_word(addr, data);
         return (*(uint16_t*)(addr) == data);
     }
-    bool write16Block(Addr dest, const uint16_t* src, uint16_t wordCnt)
+    bool write16Block(uint8_t* dest, const uint16_t* src, uint16_t wordCnt)
     {
         assert((dest & 0x1) == 0);
         assert((src & 0x1) == 0);
@@ -98,18 +102,18 @@ struct DefaultFlashDriver
         }
         return flags & kFlashWriteErrorFlags;
     }
-    bool erasePage(Addr pageAddr)
+    static bool erasePage(uint8_t* page)
     {
-        assert(pageAddr % 4 == 0);
-        flash_erase_page(pageAddr);
+        assert(((size_t)page) % 4 == 0);
+        flash_erase_page(page);
         auto err = errorFlags();
         if (err)
         {
             FLASH_LOG_ERROR("erasePage: Error flag(s) set after erase: %", fmtBin(err));
             return false;
         }
-        uint32_t* pageEnd = (uint32_t*)(pageAddr + pageSize());
-        for (uint32_t* ptr = (uint32_t*)pageAddr; ptr < pageEnd; ptr++)
+        uint32_t* pageEnd = (uint32_t*)(page + pageSize());
+        for (uint32_t* ptr = (uint32_t*)page; ptr < pageEnd; ptr++)
         {
             if (*ptr != 0xffffffff)
             {
@@ -121,37 +125,49 @@ struct DefaultFlashDriver
 };
 #else
 // x86, test mode
+#include <stdlib.h>
+#include <stdint.h>
+#include <assert.h>
+#include <memory.h>
+#include <stdio.h>
+
 #define FLASH_LOG(fmtString,...) printf("FLASH: " fmtString "\n", ##__VA_ARGS__)
 
-typedef size_t Addr;
 struct DefaultFlashDriver
 {
     class WriteUnlocker
-    { WriteUnlocker(Addr addr){} };
+    { WriteUnlocker(uint8_t* addr){} };
     enum: uint32_t { kFlashWriteErrorFlags = 0x1 };
-    void write16(Addr addr, uint16_t data)
+    static uint8_t* gWritePage;
+    static uint16_t pageSize() { return 1024; }
+    static bool write16(uint8_t* addr, uint16_t data)
     {
+        FLASH_LOG("write16 at offset %zu", addr-gWritePage);
         *((uint16_t*)addr) = data;
+        return true;
     }
-    void write16Block(Addr addr, const uint16_t* data, uint16_t wordCnt)
+    static bool write16Block(uint8_t* addr, const uint8_t* data, uint16_t wordCnt)
     {
-        assert((addr & 0x1) == 0);
-        assert((data & 0x1) == 0);
+        assert(addressIsEven(addr));
+        assert(addressIsEven(data));
         memcpy((void*)addr, data, wordCnt * 2);
+        return true;
     }
-    uint32_t errorFlags() { return 0; }
-    void clearStatusFlags() {}
-    bool erasePage(Addr addr)
+    static uint32_t errorFlags() { return 0; }
+    static void clearStatusFlags() {}
+    static bool erasePage(uint8_t* page)
     {
-        memset((void*)addr, pageSize(), 0xff);
+        memset(page, pageSize(), 0xff);
         return true;
     }
 };
 #endif
 
-#define FLASH_LOG_ERROR(fmtString,...) FLASH_LOG("ERROR: " fmtString, ##_VA_ARGS__)
+#define FLASH_LOG_ERROR(fmtString,...) FLASH_LOG("ERROR: " fmtString, ##__VA_ARGS__)
+#define FLASH_LOG_WARNING(fmtString,...) FLASH_LOG("WARN: " fmtString, ##__VA_ARGS__)
+#define FLASH_LOG_DEBUG(fmtString,...) FLASH_LOG("DEBUG: " fmtString, ##__VA_ARGS__)
 
-template <class FlashDriver>
+template <class Driver>
 struct FlashPageInfo
 {
     enum { kMagicLen = 6 };
@@ -160,20 +176,22 @@ struct FlashPageInfo
            kErrCounter = 2, kErrDataEndAlign = 3,
            kErrData = 4
     };
+    uint8_t* page;
     uint8_t* dataEnd;
     uint16_t pageCtr;
     ValidateError validateError;
 
     bool isPageValid() const { return validateError == kErrNone; }
-    static const char* magic()
+    static const uint8_t* magic()
     {
         alignas(2) static const char magic[] = "nvstor";
-        static_assert(sizeof(magic) == kPageMagicSigLen, "");
-        return magic;
+        static_assert(sizeof(magic) == kMagicLen + 1);
+        assert(addressIsEven(magic));
+        return (const uint8_t*)magic;
     }
     static uint16_t getPageCounter(uint8_t* page)
     {
-        return *((uint16_t*)(page + Driver::pageSize() - kPageMagicSigLen - sizeof(uint16_t)));
+        return *((uint16_t*)(page + Driver::pageSize() - kMagicLen - sizeof(uint16_t)));
     }
     /**
      * @brief findDataEnd Finds where the data in a page ends, by scanning the page backwards
@@ -185,75 +203,51 @@ struct FlashPageInfo
      */
     static uint8_t* findDataEnd(uint8_t* page)
     {
-        assert((page & 0x1) == 0);
-        for (uint8_t* ptr = page + PageSize - 9; ptr >= page; ptr--)
+        assert(addressIsEven(page));
+        for (uint8_t* ptr = page + Driver::pageSize() - 9; ptr >= page; ptr--)
         {
             if (*ptr != 0xff)
             {
                 ptr++;
-                return (ptr & 0x1) ? nullptr : ptr;
+                return addressIsEven(ptr) ? nullptr : ptr;
             }
         }
         // page is completely empty
         return page;
     }
 
-    PageInfo(uint8_t* page): pageCtr(getPageCounter(page))
-    {
-        if (memcmp(page-kMagicLen, kMagicLen, magic()) != 0)
-        {
-            validateError = kErrMagic;
-            return;
-        }
-        //magic is ok
-        dataEnd = findDataEnd(page);
-        if (!dataEnd)
-        {
-            validateError = kErrDataEndAlign;
-            return;
-        }
-        if (pageCtr == 0xffff)
-        {
-            validateError = kErrCounter;
-            return;
-        }
-        if (!FlashValueStore::verifyAllEntries(dataEnd, page))
-        {
-            validateError = kErrData;
-            return;
-        }
-        validateError = kErrNone;
-    }
+    FlashPageInfo(uint8_t* aPage);
 };
 
-template<Addr Page1Addr, Addr Page2Addr, Driver=DefaultFlashDriver>
+template<class Driver=DefaultFlashDriver>
 class FlashValueStore
 {
 protected:
     using PageInfo = FlashPageInfo<Driver>;
-    const uint8_t* Page1 = (uint8_t*)Page1Addr;
-    const uint8_t* Page2 = (uint8_t*)Page2Addr;
+    uint8_t* mPage1 = nullptr;
+    uint8_t* mPage2 = nullptr;
 
     bool mIsShuttingDown = false;
     uint8_t* mActivePage = nullptr;
     uint8_t* mDataEnd;
     uint16_t mReserveBytes;
+    friend PageInfo; //struct FlashPageInfo<Driver>;
 public:
     template <typename T>
     static inline T roundToNextEven(T x) { return (x + 1) & (~0x1); }
-    FlashValueStore()
+    bool init(size_t page1Addr, size_t page2Addr, uint16_t reserveBytes=0)
     {
-        static_assert(Page1Addr % 4 == 0, "Page1 is not on a 32 bit word boundary");
-        static_assert(Page2Addr % 4 == 0, "Page2 is not on a 32 bit word boundary");
-    }
-    bool init(uint16_t reserveBytes=0)
-    {
+        assert(page1Addr % 4 == 0);
+        assert(page2Addr % 4 == 0);
+        mPage1 = (uint8_t*)page1Addr;
+        mPage2 = (uint8_t*)page2Addr;
         mReserveBytes = reserveBytes;
-        PageInfo info1(Page1);
-        PageInfo info2(Page2);
-        if (info1.isPageValid)
+
+        PageInfo info1(mPage1);
+        PageInfo info2(mPage2);
+        if (info1.isPageValid())
         {
-            if (info2.isPageValid)
+            if (info2.isPageValid())
             {
                 // both contain data, the one with bigger counter wins
                 if (info1.pageCtr >= info2.pageCtr)
@@ -279,7 +273,7 @@ public:
         }
         else // page1 invalid
         {
-            if (info2.isPageValid)
+            if (info2.isPageValid())
             {
                 mActivePage = info2.page;
                 mDataEnd = info2.dataEnd;
@@ -288,7 +282,7 @@ public:
             {
                 FLASH_LOG_WARNING("No page is initialized, initializing and using page1");
                 Driver::erasePage(info1.page);
-                writeMagicAndPageCtr(info1.page, 1);
+                writePageCtrAndMagic(info1.page, 1);
                 mActivePage = mDataEnd = info1.page;
             }
         }
@@ -307,7 +301,7 @@ public:
     uint8_t* getRawValue(uint8_t key, uint8_t& size)
     {
         uint8_t* ptr = mDataEnd; // equal to mActivePage if page is empty
-        while (ptr > page)
+        while (ptr > mActivePage)
         {
             auto entryKey = *(ptr - 1);
             if (key == entryKey)
@@ -327,7 +321,7 @@ public:
     }
     uint16_t pageBytesFree() const
     {
-        return Driver::pageSize() - (mDataEnd - mActivePage) - kPageMagicSigLen - 2;
+        return Driver::pageSize() - (mDataEnd - mActivePage) - PageInfo::kMagicLen - 2;
     }
     bool setValue(uint8_t key, uint8_t* data, uint8_t len, bool isEmergency=false)
     {
@@ -349,7 +343,7 @@ public:
         uint16_t bytesNeeded = 2 + roundToNextEven(len);
         if (bytesNeeded > bytesFree)
         {
-            if (!compactPage()) // should log error message
+            if (!compact()) // should log error message
             {
                 return false;
             }
@@ -360,7 +354,7 @@ public:
                 return false;
             }
         }
-        Driver::WriteUnlocker unlocker(mActivePage);
+        typename Driver::WriteUnlocker unlocker(mActivePage);
         // data.len [pad.1] len.1 key.1
         bool ok = true;
         // First write the trailer, so that if we are are interrupted while writing
@@ -455,11 +449,12 @@ protected:
         }
         return ret;
     }
-    static bool writePageCtrAndMagic(Addr page, uint16_t ctr)
+    static bool writePageCtrAndMagic(uint8_t* page, uint16_t ctr)
     {
         bool ok = true;
-        ok &= Driver::write16Block(page - kPageMagicSigLen, pageMagicSig(), kPageMagicSigLen);
-        ok &= Driver::write16(page - kPageMagicSigLen - sizeof(uint16_t), ctr);
+        auto end = page + Driver::pageSize();
+        ok &= Driver::write16Block(end - PageInfo::kMagicLen, PageInfo::magic(), PageInfo::kMagicLen);
+        ok &= Driver::write16(end - PageInfo::kMagicLen - sizeof(uint16_t), ctr);
         return ok;
     }
     bool compact()
@@ -474,12 +469,12 @@ protected:
             FLASH_LOG_DEBUG("compactPage: Page is empty, nothing to compact");
             return true;
         }
-        auto otherPage = (mActivePage == Page1) ? Page2 : Page1;
+        auto otherPage = (mActivePage == mPage1) ? mPage2 : mPage1;
         auto srcPage = mActivePage;
         uint8_t* srcEnd = mDataEnd; // equal to mActivePage if page is empty
 
         mActivePage = mDataEnd = otherPage;
-        Driver::writeUnlocker unlocker(mActivePage);
+        typename Driver::writeUnlocker unlocker(mActivePage);
         Driver::erasePage(mActivePage);
         uint32_t hadKey[8] = { 0 };
         while (srcEnd > srcPage)
@@ -507,5 +502,33 @@ protected:
         // Done writing compacted page to the new page
     }
 };
+template <class Driver>
+FlashPageInfo<Driver>::FlashPageInfo(uint8_t* aPage)
+    : page(aPage), pageCtr(getPageCounter(page))
+{
+    if (memcmp(page-kMagicLen, magic(), kMagicLen) != 0)
+    {
+        validateError = kErrMagic;
+        return;
+    }
+    //magic is ok
+    dataEnd = findDataEnd(page);
+    if (!dataEnd)
+    {
+        validateError = kErrDataEndAlign;
+        return;
+    }
+    if (pageCtr == 0xffff)
+    {
+        validateError = kErrCounter;
+        return;
+    }
+    if (!FlashValueStore<Driver>::verifyAllEntries(dataEnd, page))
+    {
+        validateError = kErrData;
+        return;
+    }
+    validateError = kErrNone;
+}
 
 #endif
