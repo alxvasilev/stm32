@@ -4,6 +4,8 @@
 #ifdef __arm__
 #include <libopencm3/stm32/flash.h>
 
+#define FLASH_LOG(fmtString,...) tprintf("FLASH: " fmtString "\n", ##__VA_ARGS__)
+
 typedef uint32_t Addr;
 struct DefaultFlashDriver
 {
@@ -42,16 +44,36 @@ struct DefaultFlashDriver
             }
         }
     };
+    enum: uint32_t { kFlashWriteErrorFlags = FLASH_SR_WRPRTERR
+#ifdef FLASH_SR_PGERR
+    | FLASH_SR_PGERR
+#endif
+#ifdef FLASH_SR_PGAERR
+    | FLASH_SR_PGAERR
+#endif
+#ifdef FLASH_SR_PGPERR
+    | FLASH_SR_PGPERR
+#endif
+#ifdef FLASH_SR_ERSERR
+    | FLASH_SR_ERSERR
+#endif
+    };
+    uint16_t pageSize() const
+    {
+        static const uint16_t flashPageSize = DESIG_FLASH_SIZE << 10;
+        return flashPageSize;
+    }
     bool write16(Addr addr, uint16_t data)
     {
         assert((addr & 0x1) == 0);
         flash_program_half_word(addr, data);
         return (*(uint16_t*)(addr) == data);
     }
-    bool writeBuf(Addr addr, uint16_t* data, uint16_t wordCnt)
+    bool write16Block(Addr dest, const uint16_t* src, uint16_t wordCnt)
     {
-        assert((addr & 0x1) == 0);
-        uint16_t* wptr = (uint16_t*)addr;
+        assert((dest & 0x1) == 0);
+        assert((src & 0x1) == 0);
+        uint16_t* wptr = (uint16_t*)dest;
         uint16_t* end = data + wordCnt;
         for (; data < end; data++, wptr++)
         {
@@ -74,119 +96,202 @@ struct DefaultFlashDriver
         {
             flags |= FLASH_SR2;
         }
-        return flags & (FLASH_SR_PGERR | FLASH_SR_WRPRTERR);
+        return flags & kFlashWriteErrorFlags;
     }
-    bool erasePage(Addr pageAddr, size_t pageSize)
+    bool erasePage(Addr pageAddr)
     {
-        assert((pageSize % 4) == 0);
+        assert(pageAddr % 4 == 0);
         flash_erase_page(pageAddr);
-        uint32_t* pageEnd = pageAddr + (pageSize / sizeof(uint32_t));
-        for (uint32_t* ptr = pageAddr; ptr < pageEnd; ptr++)
+        auto err = errorFlags();
+        if (err)
+        {
+            FLASH_LOG_ERROR("erasePage: Error flag(s) set after erase: %", fmtBin(err));
+            return false;
+        }
+        uint32_t* pageEnd = (uint32_t*)(pageAddr + pageSize());
+        for (uint32_t* ptr = (uint32_t*)pageAddr; ptr < pageEnd; ptr++)
         {
             if (*ptr != 0xffffffff)
+            {
+                FLASH_LOG_ERROR("erasePage: Page contains a byte that is not 0xff after erase");
                 return false;
         }
         return true;
     }
 };
 #else
+// x86, test mode
+#define FLASH_LOG(fmtString,...) printf("FLASH: " fmtString "\n", ##__VA_ARGS__)
+
 typedef size_t Addr;
 struct DefaultFlashDriver
 {
     class WriteUnlocker
     { WriteUnlocker(Addr addr){} };
+    enum: uint32_t { kFlashWriteErrorFlags = 0x1 };
     void write16(Addr addr, uint16_t data)
     {
         *((uint16_t*)addr) = data;
     }
+    void write16Block(Addr addr, const uint16_t* data, uint16_t wordCnt)
+    {
+        assert((addr & 0x1) == 0);
+        assert((data & 0x1) == 0);
+        memcpy((void*)addr, data, wordCnt * 2);
+    }
     uint32_t errorFlags() { return 0; }
     void clearStatusFlags() {}
-    void erasePage(Addr addr) {}
+    bool erasePage(Addr addr)
+    {
+        memset((void*)addr, pageSize(), 0xff);
+        return true;
+    }
 };
 #endif
 
-template<int PageSize, Addr Page1Addr, Addr Page2Addr, Driver=DefaultFlashDriver>
+#define FLASH_LOG_ERROR(fmtString,...) FLASH_LOG("ERROR: " fmtString, ##_VA_ARGS__)
+
+template <class FlashDriver>
+struct FlashPageInfo
+{
+    enum { kMagicLen = 6 };
+    enum ValidateError: uint8_t {
+           kErrNone = 0, kErrMagic = 1,
+           kErrCounter = 2, kErrDataEndAlign = 3,
+           kErrData = 4
+    };
+    uint8_t* dataEnd;
+    uint16_t pageCtr;
+    ValidateError validateError;
+
+    bool isPageValid() const { return validateError == kErrNone; }
+    static const char* magic()
+    {
+        alignas(2) static const char magic[] = "nvstor";
+        static_assert(sizeof(magic) == kPageMagicSigLen, "");
+        return magic;
+    }
+    static uint16_t getPageCounter(uint8_t* page)
+    {
+        return *((uint16_t*)(page + Driver::pageSize() - kPageMagicSigLen - sizeof(uint16_t)));
+    }
+    /**
+     * @brief findDataEnd Finds where the data in a page ends, by scanning the page backwards
+     * and finding the last byte with value 0xff
+     * @param page The start of the page which to scan
+     * @return A pointer to the first byte after the last data entry (first byte with 0xff value)
+     * If the pointer is not an even address, then the page content is not valid, and nullptr
+     * is returned
+     */
+    static uint8_t* findDataEnd(uint8_t* page)
+    {
+        assert((page & 0x1) == 0);
+        for (uint8_t* ptr = page + PageSize - 9; ptr >= page; ptr--)
+        {
+            if (*ptr != 0xff)
+            {
+                ptr++;
+                return (ptr & 0x1) ? nullptr : ptr;
+            }
+        }
+        // page is completely empty
+        return page;
+    }
+
+    PageInfo(uint8_t* page): pageCtr(getPageCounter(page))
+    {
+        if (memcmp(page-kMagicLen, kMagicLen, magic()) != 0)
+        {
+            validateError = kErrMagic;
+            return;
+        }
+        //magic is ok
+        dataEnd = findDataEnd(page);
+        if (!dataEnd)
+        {
+            validateError = kErrDataEndAlign;
+            return;
+        }
+        if (pageCtr == 0xffff)
+        {
+            validateError = kErrCounter;
+            return;
+        }
+        if (!FlashValueStore::verifyAllEntries(dataEnd, page))
+        {
+            validateError = kErrData;
+            return;
+        }
+        validateError = kErrNone;
+    }
+};
+
+template<Addr Page1Addr, Addr Page2Addr, Driver=DefaultFlashDriver>
 class FlashValueStore
 {
 protected:
+    using PageInfo = FlashPageInfo<Driver>;
     const uint8_t* Page1 = (uint8_t*)Page1Addr;
     const uint8_t* Page2 = (uint8_t*)Page2Addr;
 
     bool mIsShuttingDown = false;
     uint8_t* mActivePage = nullptr;
-    uint8_t* mDataEnd = nullptr;
+    uint8_t* mDataEnd;
     uint16_t mReserveBytes;
 public:
-    static constexpr alignas(2) char kPageMagicSig[] = "nvstor";
-    enum { kPageMagicSigLen = sizeof(kPageMagicSig) - 1 };
-    FlashValueStore(uint16_t reserveBytes=0): mReserveBytes(reserveBytes)
+    template <typename T>
+    static inline T roundToNextEven(T x) { return (x + 1) & (~0x1); }
+    FlashValueStore()
     {
-        static_assert(PageSize <= 65535, "Page size is larger than 64K");
-        static_assert(PageSize % 4 == 0, "Page size is not a multiple of 4 bytes");
         static_assert(Page1Addr % 4 == 0, "Page1 is not on a 32 bit word boundary");
         static_assert(Page2Addr % 4 == 0, "Page2 is not on a 32 bit word boundary");
     }
-    bool init()
+    bool init(uint16_t reserveBytes=0)
     {
-        bool page1Valid = verifyPage(Page1);
-        bool page2Valid = verifyPage(Page2);
-        if (page1Valid && page2Valid)
+        mReserveBytes = reserveBytes;
+        PageInfo info1(Page1);
+        PageInfo info2(Page2);
+        if (info1.isPageValid)
         {
-            auto ctr1 = getPageEraseCounter(Page1);
-            auto ctr2 = getPageEraseCounter(Page2);
-            if (ctr1 > ctr2)
+            if (info2.isPageValid)
             {
-                mActivePage = Page1;
+                // both contain data, the one with bigger counter wins
+                if (info1.pageCtr >= info2.pageCtr)
+                {
+                    if (info1.pageCtr == info2.pageCtr)
+                    {
+                        FLASH_LOG_WARNING("FlashValueStore: Both pages have the same erase counter, using page1");
+                    }
+                    mActivePage = info1.page;
+                    mDataEnd = info1.dataEnd;
+                }
+                else if (info2.pageCtr > info1.pageCtr)
+                {
+                    mActivePage = info2.page;
+                    mDataEnd = info2.dataEnd;
+                }
             }
-            else if (ctr2 > ctr1)
+            else // page1 valid, page2 invalid
             {
-                mActivePage = Page2;
+                mActivePage = info1.page;
+                mDataEnd = info1.dataEnd;
             }
-            else // counters equal, print a warning and assume page1
+        }
+        else // page1 invalid
+        {
+            if (info2.isPageValid)
             {
-                FLASH_LOG_WARNING("FlashValueStore: Both pages have the same erase counter (%), using page1", ctr1);
-                mActivePage = Page1;
+                mActivePage = info2.page;
+                mDataEnd = info2.dataEnd;
             }
-        }
-        else if (page1Valid)
-        {
-            mActivePage = Page1;
-        }
-        else if (page2Valid)
-        {
-            mActivePage = Page2;
-        }
-        else
-        {
-            FLASH_LOG_WARNING("No page is initialized, initializing and using page1");
-            if (!initPage(Page1, 0))
+            else // both pages invalid
             {
-                return false;
+                FLASH_LOG_WARNING("No page is initialized, initializing and using page1");
+                Driver::erasePage(info1.page);
+                writeMagicAndPageCtr(info1.page, 1);
+                mActivePage = mDataEnd = info1.page;
             }
-            mActivePage = Page1;
         }
-        return true;
-    }
-    uint16_t getPageEraseCounter(uint8_t* page)
-    {
-        return *((uint16_t*)(page + PageSize - sizeof(uint16_t)));
-    }
-    bool setPage(uint8_t* page)
-    {
-        auto end = findDataEnd(page);
-        if (!end)
-        {
-            FLASH_LOG_WARN("Refusing to set page: content ends on an even address");
-            return false;
-        }
-        if (!verifyAllEntries(end, page))
-        {
-            FLASH_LOG_WARN("Refusing to set page: error parsing page content");
-            return false;
-        }
-        mActivePage = page;
-        mDataEnd = end;
-        return true;
     }
     /**
      * @brief getRawValue
@@ -199,16 +304,16 @@ public:
      * - If an error occurred during the search, \c nullptr is returned and \c size is set
      * to a nonzero error code
      */
-    uint8_t* getRawValue(uint8_t key, uint16_t& size)
+    uint8_t* getRawValue(uint8_t key, uint8_t& size)
     {
         uint8_t* ptr = mDataEnd; // equal to mActivePage if page is empty
         while (ptr > page)
         {
-            auto entryKey = *(ptr - 3);
+            auto entryKey = *(ptr - 1);
             if (key == entryKey)
             {
-                size = *((uint16_t*)(ptr-2));
-                return size ? (ptr - 4 + (size & 1) - size) : nullptr;
+                uint8_t len = *(ptr-2);
+                return len ? (ptr - 2 - roundToNextEven(len)) : nullptr;
             }
             ptr = getPrevEntryEnd(ptr, mActivePage);
             if (ptr == (uint8_t*)-1)
@@ -220,29 +325,35 @@ public:
         size = 0;
         return nullptr;
     }
-    uint16_t bytesFree() const
+    uint16_t pageBytesFree() const
     {
-        return PageSize - (mDataEnd - mActivePage) - kPageMagicSigLen - 2;
+        return Driver::pageSize() - (mDataEnd - mActivePage) - kPageMagicSigLen - 2;
     }
-    bool setValue(uint8_t key, uint8_t* data, uint16_t len, bool isEmergency=false)
+    bool setValue(uint8_t key, uint8_t* data, uint8_t len, bool isEmergency=false)
     {
-        auto bytesFree = PageSize - (mDataEnd - mActivePage) - kPageMagicSigLen - 2;
+        if (key == 0xff)
+        {
+            FLASH_LOG_ERROR("setValue: Invalid key 0xff provided");
+            return false;
+        }
+        auto bytesFree = pageBytesFree();
         if (!isEmergency)
         {
             if (mIsShuttingDown)
             {
+                FLASH_LOG_ERROR("setValue: Refusing to write, system is shutting down");
                 return false;
             }
             bytesFree -= mReserveBytes;
         }
-        uint16_t bytesNeeded = len + ((len & 1) ? 3 : 4);
+        uint16_t bytesNeeded = 2 + roundToNextEven(len);
         if (bytesNeeded > bytesFree)
         {
             if (!compactPage()) // should log error message
             {
                 return false;
             }
-            bytesFree = bytesFree();
+            bytesFree = pageBytesFree();
             if (bytesNeeded > bytesFree)
             {
                 FLASH_LOG_ERROR("Not enough space to write value even after compacting: available: %, required % bytes", bytesFree, bytesNeeded);
@@ -250,53 +361,55 @@ public:
             }
         }
         Driver::WriteUnlocker unlocker(mActivePage);
+        // data.len [pad.1] len.1 key.1
+        bool ok = true;
+        // First write the trailer, so that if we are are interrupted while writing
+        // the actual length, we can still have the record boundary
+        ok &= Driver::write16(mDataEnd + roundToNextEven(len), (key << 8) | len);
+
         if ((len & 1) == 0) // even number of bytes
         {
             if (len)
             {
-                uint8_t* end = mDataEnd + len;
-                for (; mDataEnd < end; data+=2, mDataEnd+=2)
-                {
-                    Driver::write16(mDataEnd, *((uint16_t*)data));
-                }
+                ok &= Driver::write16Block(mDataEnd, data, len / 2);
             }
-            Driver::write16(mDataEnd, key);
-            Driver::write16(mDataEnd + 2, len);
-            mDataEnd += 4;
+            mDataEnd += (len + 2);
         }
         else
         { // len is odd
-            uint16_t even = len - 1;
+            uint8_t even = len - 1;
             if (even)
             {
-                uint8_t* end = mDataEnd + even;
-                for (; mDataEnd < end; data+=2, mDataEnd+=2)
-                {
-                    Driver::write16(mDataEnd, *((uint16_t*)data));
-                }
+                Driver::write16Block(mDataEnd, data, even / 2);
+                mDataEnd += even;
             }
-            // write last (odd) data byte and key
-            Driver::write16(mDataEnd, (key << 8) | data[even]);
-            Driver::write16(mDataEnd + 2, len);
-            mDataEnd += 4;
+            // write last (odd) data byte and a zero padding byte
+            ok &= Driver::write16(mDataEnd, data[even]);
+            mDataEnd += 2;
         }
         auto err = Driver::errorFlags();
         if (err)
         {
             FLASH_LOG_ERROR("Error writing value: %", fmtHex(err));
+            return false;
         }
-        return err == 0;
+        return true;
     }
 protected:
     /**
      * @brief verifyAllEntries Parses all entries
      * @return false if an error was detected, true otherwise
      */
-    bool verifyAllEntries(uint8_t* dataEnd, uint8_t* page)
+    static bool verifyAllEntries(uint8_t* dataEnd, uint8_t* page)
     {
         uint8_t* ptr = dataEnd; // equal to mActivePage if page is empty
         while (ptr > page)
         {
+            if (*(ptr - 1) == 0xff) // key can't be 0xff
+            {
+                FLASH_LOG_ERROR("verifyAllEntries: Found a key with value 0xff");
+                return false;
+            }
             ptr = getPrevEntryEnd(ptr, page);
             if (ptr == (uint8_t*)-1)
             {
@@ -312,55 +425,29 @@ protected:
     }
 
     /**
-     * @brief findDataEnd Finds where the data in a page ends, by scanning the page backwards
-     * and finding the last byte with value 0xff
-     * @param page The start of the page which to scan
-     * @return A pointer to the first byte after the last data entry (first byte with 0xff value)
-     * If the pointer is not an even address, then the page content is not valid, and nullptr
-     * is returned
-     */
-    uint8_t* findDataEnd(uint8_t* page)
-    {
-        assert((page & 0x1) == 0);
-        for (uint8_t* ptr = page + PageSize - 9; ptr >= page; ptr--)
-        {
-            if (*ptr != 0xff)
-            {
-                ptr++;
-                return (ptr & 0x1) ? nullptr : ptr;
-            }
-        }
-        // page is completely empty
-        return page;
-    }
-    /**
      * @brief getPrevEntryEnd - returns a pointer past the end of the entry preceding the specified one
      * @param entryEnd - pointer past the last byte of an entry
      * @return Pointer to the first byte of this entry, i.e. points past the end of the previous entry
      */
-    uint8_t* getPrevEntryEnd(uint8_t* entryEnd, uint8_t* page)
+    static uint8_t* getPrevEntryEnd(uint8_t* entryEnd, uint8_t* page)
     {
-         // data.len [align.1] key.1 len.2
-        if (entryEnd - page < (1 + sizeof(uint16_t)))
+         // data.len [align.1] len.1 key.1
+        if (entryEnd - page < 2)
         {
-            if (entryEnd != page)
+            if (entryEnd == page)
             {
-                FLASH_LOG_ERROR("getPrevEntryEnd: provided entryEnd is less than 3 bytes past the start of the page");
-                return (uint8_t*)-1;
+                return nullptr; // we have reached the start of the page
             }
-            return nullptr;
+            else
+            {
+                FLASH_LOG_ERROR("getPrevEntryEnd: provided entryEnd is less than 2 bytes past the start of the page");
+                return (uint8_t*)-1; // 0xffffffff pointer means error
+            }
         }
-        auto len = *((uint16_t*)(entryEnd - sizeof(uint16_t)));
-        if (len & 0x8000)
-        {
-            // This is an error: most significant bit of len must always be zero,
-            // to detect presence of data (after flash all bits are 1s)
-            return (uint8_t*)-1;
-        }
-        // if length is odd, we don't need a padding byte -> 3 bytes of metadata
-        // if length is even, metadata must also be even -> 4 bytes = 3 bytes + 1 pad byte
-        // skip metadata + len + 1 to reach previous entry
-        auto ret = entryEnd - 4 + (len & 1) - len;
+        uint8_t len = *(entryEnd - 2);
+        // if len is odd, round it to the next even number, i.e. we have an extra
+        // padding byte after the data, if len is odd
+        auto ret = entryEnd - 2 + roundToNextEven(len);
         if (ret < page)
         {
             FLASH_LOG_ERROR("getPrevEntryEnd: provided entry spans before page start");
@@ -368,7 +455,14 @@ protected:
         }
         return ret;
     }
-    bool compactPage()
+    static bool writePageCtrAndMagic(Addr page, uint16_t ctr)
+    {
+        bool ok = true;
+        ok &= Driver::write16Block(page - kPageMagicSigLen, pageMagicSig(), kPageMagicSigLen);
+        ok &= Driver::write16(page - kPageMagicSigLen - sizeof(uint16_t), ctr);
+        return ok;
+    }
+    bool compact()
     {
         if (mIsShuttingDown)
         {
@@ -381,54 +475,37 @@ protected:
             return true;
         }
         auto otherPage = (mActivePage == Page1) ? Page2 : Page1;
-        if (!otherPage)
-        {
-            return compactPageInplace();
-        }
         auto srcPage = mActivePage;
         uint8_t* srcEnd = mDataEnd; // equal to mActivePage if page is empty
 
         mActivePage = mDataEnd = otherPage;
         Driver::writeUnlocker unlocker(mActivePage);
-        Driver::erasePage(mActivePage, PageSize);
+        Driver::erasePage(mActivePage);
         uint32_t hadKey[8] = { 0 };
         while (srcEnd > srcPage)
         {
-            uint8_t key = *(srcEnd - 3);
+            uint8_t len = *(srcEnd - 2);
+            uint8_t* data = srcEnd - 2 - roundToNextEven(len);
+
+            uint8_t key = *(srcEnd - 1);
+            assert(key != 0xff);
             uint8_t idx = key >> 5;
             uint32_t mask = 1 << (key & 0b00011111);
             auto& flags = hadKey[idx];
-            if (flags & mask)
+            if ((flags & mask) == 0)
             {
-                continue;
+                flags |= mask;
+                setValue(key, data, len, true);
             }
-            flags |= mask;
-            uint16_t len = *((uint16_t*)(srcEnd - 2));
-            uint8_t* data = srcEnd - 4 + (len & 0x1) - len;
-            setValue(key, data, len, true);
-
-            srcEnd = getPrevEntryEnd(srcEnd, srcPage);
-            assert(srcEnd != (uint8_t*)-1);
+            srcEnd = data;
         }
-        assert(srcEnd == srcPage);
-        Driver::write16(mActivePage-6,
-
-        auto end = mDataEnd;
-        while (end > mActivePage)
+        if (srcEnd != srcPage)
         {
-
-        auto
-
-        isPage
-
-        struct EntryInfo
-        {
-            uint16_t dataOfs;
-            uint16_t num;
-        };
-        EntryInfo entries[256];
-
-
+            FLASH_LOG_ERROR("compactPage: backward scan did not end at page start, still continuing");
+        }
+        writePageCtrAndMagic(mActivePage, PageInfo::getPageCounter(srcPage) + 1);
+        // Done writing compacted page to the new page
+    }
 };
 
 #endif
