@@ -151,7 +151,7 @@ struct DefaultFlashDriver
     static bool write16Block(uint8_t* addr, const uint8_t* data, uint16_t wordCnt)
     {
         assert(addressIsEven(addr));
-        assert(addressIsEven(data));
+//      assert(addressIsEven(data));
         memcpy((void*)addr, data, wordCnt * 2);
         return true;
     }
@@ -187,7 +187,7 @@ struct FlashPageInfo
     static const uint8_t* magic()
     {
         alignas(2) static const char magic[] = "nvstor";
-        static_assert(sizeof(magic) == kMagicLen + 1);
+        static_assert(sizeof(magic) == kMagicLen + 1, "Mismatch of magic string and the enum denoting its length");
         assert(addressIsEven(magic));
         return (const uint8_t*)magic;
     }
@@ -293,6 +293,7 @@ public:
                 mActivePage = mDataEnd = info1.page;
             }
         }
+        return true;
     }
     /**
      * @brief getRawValue
