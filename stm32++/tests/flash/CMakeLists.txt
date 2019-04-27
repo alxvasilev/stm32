@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
 include_directories(../../include)
-add_definitions(-std=c++14)
+add_definitions(-std=c++14 --sanitize=address)
+set(CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS} --sanitize=address)
 add_executable(nvstore-test flash.cpp)

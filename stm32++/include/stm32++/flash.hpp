@@ -13,7 +13,7 @@ static inline uint16_t roundToNextEven(T x) { return ((uint16_t)x + 1) & (~0x1);
 #ifdef __arm__
 #include <libopencm3/stm32/flash.h>
 
-#define FLASH_LOG(fmtString,...) tprintf("FLASH: " fmtString "\n", ##__VA_ARGS__)
+#define STM32PP_FLASH_LOG(fmtString,...) tprintf("FLASH: " fmtString "\n", ##__VA_ARGS__)
 
 struct DefaultFlashDriver
 {
@@ -114,7 +114,7 @@ struct DefaultFlashDriver
         auto err = errorFlags();
         if (err)
         {
-            FLASH_LOG_ERROR("erasePage: Error flag(s) set after erase: %", fmtBin(err));
+            STM32PP_FLASH_LOG_ERROR("erasePage: Error flag(s) set after erase: %", fmtBin(err));
             return false;
         }
         uint32_t* pageEnd = (uint32_t*)(page + pageSize());
@@ -122,7 +122,7 @@ struct DefaultFlashDriver
         {
             if (*ptr != 0xffffffff)
             {
-                FLASH_LOG_ERROR("erasePage: Page contains a byte that is not 0xff after erase");
+                STM32PP_FLASH_LOG_ERROR("erasePage: Page contains a byte that is not 0xff after erase");
                 return false;
         }
         return true;
@@ -135,24 +135,40 @@ struct DefaultFlashDriver
 #include <memory.h>
 #include <stdio.h>
 
-#define FLASH_LOG(fmtString,...) printf("FLASH: " fmtString "\n", ##__VA_ARGS__)
+#define STM32PP_FLASH_LOG(fmtString,...) printf("FLASH: " fmtString "\n", ##__VA_ARGS__)
 
+// This is a simulator used for testing the library, on a pc
 struct DefaultFlashDriver
 {
     class WriteUnlocker
     { public: WriteUnlocker(uint8_t* addr){} };
     enum: uint32_t { kFlashWriteErrorFlags = 0x1 };
-    static uint16_t pageSize() { return 1024; }
+#ifdef STM32PP_FLASH_SIMULATE_POWER_LOSS
+    static int32_t failAtWriteNum;
+#endif
     static bool write16(uint8_t* addr, uint16_t data)
     {
+#ifdef STM32PP_FLASH_SIMULATE_POWER_LOSS
+        if (--failAtWriteNum <= 0)
+        {
+            throw 0;
+        }
+#endif
         *((uint16_t*)addr) = data;
         return true;
     }
-    static bool write16Block(uint8_t* addr, const uint8_t* data, uint16_t wordCnt)
+    static uint16_t pageSize() { return 1024; }
+    static bool write16Block(uint8_t* dest, const uint8_t* src, uint16_t wordCnt)
     {
-        assert(addressIsEven(addr));
-//      assert(addressIsEven(data));
-        memcpy((void*)addr, data, wordCnt * 2);
+        assert(addressIsEven(dest));
+//      assert(addressIsEven(src));
+        for (auto srcEnd = src + wordCnt * 2; src < srcEnd; src+=2, dest+=2)
+        {
+            if (!write16(dest, *((uint16_t*)src)))
+            {
+                return false;
+            }
+        }
         return true;
     }
     static uint32_t errorFlags() { return 0; }
@@ -165,9 +181,9 @@ struct DefaultFlashDriver
 };
 #endif
 
-#define FLASH_LOG_ERROR(fmtString,...) FLASH_LOG("ERROR: " fmtString, ##__VA_ARGS__)
-#define FLASH_LOG_WARNING(fmtString,...) FLASH_LOG("WARN: " fmtString, ##__VA_ARGS__)
-#define FLASH_LOG_DEBUG(fmtString,...) FLASH_LOG("DEBUG: " fmtString, ##__VA_ARGS__)
+#define STM32PP_FLASH_LOG_ERROR(fmtString,...) STM32PP_FLASH_LOG("ERROR: " fmtString, ##__VA_ARGS__)
+#define STM32PP_FLASH_LOG_WARNING(fmtString,...) STM32PP_FLASH_LOG("WARN: " fmtString, ##__VA_ARGS__)
+#define STM32PP_FLASH_LOG_DEBUG(fmtString,...) STM32PP_FLASH_LOG("DEBUG: " fmtString, ##__VA_ARGS__)
 
 template <class Driver>
 struct FlashPageInfo
@@ -235,6 +251,7 @@ protected:
     uint16_t mReserveBytes;
     friend PageInfo;
 public:
+    uint8_t* activePage() const { return mActivePage; }
     bool init(size_t page1Addr, size_t page2Addr, uint16_t reserveBytes=0)
     {
         assert(page1Addr % 4 == 0);
@@ -254,11 +271,11 @@ public:
                 {
                     if (info1.pageCtr == info2.pageCtr)
                     {
-                        FLASH_LOG_WARNING("init: Both pages are valid, and have the same counter, using page1");
+                        STM32PP_FLASH_LOG_WARNING("init: Both pages are valid, and have the same counter, using page1");
                     }
                     else
                     {
-                        FLASH_LOG_DEBUG("init: Both pages are valid, but page1 has bigger counter, using it");
+                        STM32PP_FLASH_LOG_DEBUG("init: Both pages are valid, but page1 has bigger counter, using it");
                     }
                     mActivePage = info1.page;
                     mDataEnd = info1.dataEnd;
@@ -267,14 +284,14 @@ public:
                 {
                     mActivePage = info2.page;
                     mDataEnd = info2.dataEnd;
-                    FLASH_LOG_DEBUG("init: Both pages are valid, but page2 has bigger counter, using it");
+                    STM32PP_FLASH_LOG_DEBUG("init: Both pages are valid, but page2 has bigger counter, using it");
                 }
             }
             else // page1 valid, page2 invalid
             {
                 mActivePage = info1.page;
                 mDataEnd = info1.dataEnd;
-                FLASH_LOG_DEBUG("init: Page1 is valid, pages is invalid, using page1");
+                STM32PP_FLASH_LOG_DEBUG("init: Page1 is valid, page2 is invalid, using page1");
             }
         }
         else // page1 invalid
@@ -283,11 +300,11 @@ public:
             {
                 mActivePage = info2.page;
                 mDataEnd = info2.dataEnd;
-                FLASH_LOG_DEBUG("init: Page2 is valid, page1 is invalid, using page2");
+                STM32PP_FLASH_LOG_DEBUG("init: Page2 is valid, page1 is invalid, using page2");
             }
             else // both pages invalid
             {
-                FLASH_LOG_WARNING("No page is initialized, initializing and using page1");
+                STM32PP_FLASH_LOG_WARNING("No page is initialized, initializing and using page1");
                 Driver::erasePage(info1.page);
                 writePageCtrAndMagic(info1.page, 1);
                 mActivePage = mDataEnd = info1.page;
@@ -341,11 +358,12 @@ public:
     {
         return Driver::pageSize() - (mDataEnd - mActivePage) - PageInfo::kMagicLen - 2;
     }
+    uint8_t activePageId() const { return (mActivePage == mPage1) ? 1 : 2; }
     bool setValue(uint8_t key, const void* data, uint8_t len, bool isEmergency=false)
     {
         if (key == 0xff)
         {
-            FLASH_LOG_ERROR("setValue: Invalid key 0xff provided");
+            STM32PP_FLASH_LOG_ERROR("setValue: Invalid key 0xff provided");
             return false;
         }
         auto bytesFree = pageBytesFree();
@@ -353,7 +371,7 @@ public:
         {
             if (mIsShuttingDown)
             {
-                FLASH_LOG_ERROR("setValue: Refusing to write, system is shutting down");
+                STM32PP_FLASH_LOG_ERROR("setValue: Refusing to write, system is shutting down");
                 return false;
             }
             bytesFree -= mReserveBytes;
@@ -361,15 +379,16 @@ public:
         uint16_t bytesNeeded = 2 + roundToNextEven(len);
         if (bytesNeeded > bytesFree)
         {
+            STM32PP_FLASH_LOG_DEBUG("Not enough space in page%d to write value, switching to other page and compacting", activePageId());
             if (!compact()) // should log error message
             {
                 return false;
             }
-            FLASH_LOG_DEBUG("Compacted to %d bytes\n", Driver::pageSize()-pageBytesFree());
+            STM32PP_FLASH_LOG_DEBUG("Compacted to %d bytes\n", Driver::pageSize()-pageBytesFree());
             bytesFree = pageBytesFree();
             if (bytesNeeded > bytesFree)
             {
-                FLASH_LOG_ERROR("Not enough space to write value even after compacting: available: %d, required %d bytes", bytesFree, bytesNeeded);
+                STM32PP_FLASH_LOG_ERROR("Not enough space to write value even after compacting: available: %d, required %d bytes", bytesFree, bytesNeeded);
                 return false;
             }
         }
@@ -403,7 +422,7 @@ public:
         auto err = Driver::errorFlags();
         if (err)
         {
-            FLASH_LOG_ERROR("Error writing value: %x", err);
+            STM32PP_FLASH_LOG_ERROR("Error writing value: %x", err);
             return false;
         }
         return true;
@@ -415,23 +434,26 @@ protected:
      */
     static bool verifyAllEntries(uint8_t* dataEnd, uint8_t* page)
     {
-        for (uint8_t* ptr = dataEnd;;) // equal to mActivePage if page is empty
+        while(dataEnd > page)
         {
-            if (*(ptr - 1) == 0xff) // key can't be 0xff
+            if (*(dataEnd - 1) == 0xff) // key can't be 0xff
             {
-                FLASH_LOG_ERROR("verifyAllEntries: Found a key with value 0xff");
+                STM32PP_FLASH_LOG_ERROR("verifyAllEntries: Found a key with value 0xff");
                 return false;
             }
-            ptr = getPrevEntryEnd(ptr, page);
-            if (!ptr)
+            dataEnd = getPrevEntryEnd(dataEnd, page);
+            if (!dataEnd)
             {
                 return true;
             }
-            if (ptr == (uint8_t*)-1)
+            if (dataEnd == (uint8_t*)-1)
             {
                 return false;
             }
         }
+        // getPrevEntryEnd guarantees it won't return a pointer < page
+        assert(dataEnd == page);
+        return true;
     }
 
     /**
@@ -450,7 +472,7 @@ protected:
             }
             else
             {
-                FLASH_LOG_ERROR("getPrevEntryEnd: provided entryEnd is less than 2 bytes past the start of the page");
+                STM32PP_FLASH_LOG_ERROR("getPrevEntryEnd: provided entryEnd is less than 2 bytes past the start of the page");
                 return (uint8_t*)-1; // 0xffffffff pointer means error
             }
         }
@@ -460,7 +482,7 @@ protected:
         auto ret = entryEnd - 2 - roundToNextEven(len);
         if (ret < page)
         {
-            FLASH_LOG_ERROR("getPrevEntryEnd: provided entry spans before page start");
+            STM32PP_FLASH_LOG_ERROR("getPrevEntryEnd: provided entry spans before page start");
             return (uint8_t*)-1;
         }
         return ret;
@@ -469,7 +491,7 @@ protected:
     {
         bool ok = true;
         auto end = page + Driver::pageSize();
-        ok &= Driver::write16Block(end - PageInfo::kMagicLen, PageInfo::magic(), PageInfo::kMagicLen);
+        ok &= Driver::write16Block(end - PageInfo::kMagicLen, PageInfo::magic(), PageInfo::kMagicLen / 2);
         ok &= Driver::write16(end - PageInfo::kMagicLen - sizeof(uint16_t), ctr);
         return ok;
     }
@@ -477,12 +499,12 @@ protected:
     {
         if (mIsShuttingDown)
         {
-            FLASH_LOG_ERROR("compactPage: System is shutting down");
+            STM32PP_FLASH_LOG_ERROR("compactPage: System is shutting down");
             return false;
         }
         if (mDataEnd == mActivePage)
         {
-            FLASH_LOG_DEBUG("compactPage: Page is empty, nothing to compact");
+            STM32PP_FLASH_LOG_DEBUG("compactPage: Page is empty, nothing to compact");
             return true;
         }
         auto otherPage = (mActivePage == mPage1) ? mPage2 : mPage1;
@@ -512,7 +534,7 @@ protected:
         }
         if (srcEnd != srcPage)
         {
-            FLASH_LOG_ERROR("compactPage: backward scan did not end at page start, still continuing");
+            STM32PP_FLASH_LOG_ERROR("compactPage: backward scan did not end at page start, still continuing");
         }
         writePageCtrAndMagic(mActivePage, PageInfo::getPageCounter(srcPage) + 1);
         // Done writing compacted page to the new page
