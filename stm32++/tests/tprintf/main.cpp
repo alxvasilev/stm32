@@ -40,7 +40,9 @@ int main()
            fmtFp<6>(123.4567, 4));
     expect("this is an int: '  001234'", "this is an int: '%'", fmtInt(1234, 6, 8));
     expect("this is a hex8(127): 0x7f", "this is a hex8(127): %", fmtHex(127));
-    expect("this is a hex16(32767): 0x7fff", "this is a hex16(32767): %", fmtHex(32767));
+    expect("this is a hex16(32767): 0x7FFF", "this is a hex16(32767): %", fmtHex<kUpperCase>(32767));
+    expect("this is a hex16(32767) no prefix: 7fff", "this is a hex16(32767) no prefix: %", fmtHex<kNoPrefix>(32767));
+
     expect("this is an octal: OCT4553207", "this is an octal: %", fmtInt<8>(1234567));
     expect("this is a bin(127): 0b01111111", "this is a bin(127): %", fmtBin(127));
     expect("this is a string: 'test message'", "this is a string: %", "'test message'");

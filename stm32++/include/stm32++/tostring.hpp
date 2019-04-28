@@ -5,7 +5,6 @@
 
 #ifndef _TOSTRING_H
 #define _TOSTRING_H
-
 #include <type_traits>
 #include <assert.h>
 #include <stddef.h>
@@ -76,7 +75,8 @@ template <Flags flags>
 struct DigitConverter<8, flags>
 {
     enum { digitsPerByte = 3, prefixLen = 3 };
-    static char* putPrefix(char *buf) { buf[0] = 'O'; buf[1] = 'C'; buf[2] = 'T'; return buf+3; }
+    static char* putPrefix(char *buf)
+    { buf[0] = 'O'; buf[1] = 'C'; buf[2] = 'T'; return buf+3; }
     static char toDigit(uint8_t digit) { return '0'+digit; }
 };
 
@@ -219,13 +219,16 @@ struct IntFmt
 {
     typedef typename UnsignedEquiv<T>::type ScalarType;
     enum: uint8_t { base = baseFromFlags(aFlags) };
-    static constexpr Flags flags = aFlags & kFlagsBaseMask;
+    static constexpr Flags flags = aFlags & (kFlagsBaseMask | kNoPrefix | kUpperCase);
     ScalarType value;
     uint8_t minDigits;
     uint8_t minLen;
-    explicit IntFmt(T aVal, uint8_t aMinDigits=0, uint8_t aMinLen=0): value((ScalarType)(aVal)), minDigits(aMinDigits), minLen(aMinLen){}
+    explicit IntFmt(T aVal, uint8_t aMinDigits=0, uint8_t aMinLen=0)
+    : value((ScalarType)(aVal)), minDigits(aMinDigits), minLen(aMinLen){}
+
     template <class U=T, class=typename std::enable_if<!std::is_same<ScalarType, U>::value, void>::type>
-    explicit IntFmt(ScalarType aVal, uint8_t aMinDigits=0, uint8_t aMinLen=0): value(aVal), minDigits(aMinDigits), minLen(aMinLen){}
+    explicit IntFmt(ScalarType aVal, uint8_t aMinDigits=0, uint8_t aMinLen=0)
+    : value(aVal), minDigits(aMinDigits), minLen(aMinLen){}
 };
 
 template <typename T, uint8_t base>
@@ -251,27 +254,27 @@ IntFmt<T, flags> fmtInt(T aVal, uint8_t minDigits=0, uint8_t minLen=0)
 
 template <Flags flags=0, class T>
 auto fmtHex(T aVal, uint8_t minDigits=0, uint8_t minLen=0)
-{ return IntFmt<T, (flags&~kFlagsBaseMask)|16>(aVal, minDigits, minLen); }
+{ return IntFmt<T, (flags & ~kFlagsBaseMask)|16>(aVal, minDigits, minLen); }
 
 template <Flags flags=0, class T>
 auto fmtBin(T aVal, uint8_t minDigits=8, uint8_t minLen=0)
-{ return IntFmt<T, (flags&~kFlagsBaseMask)|2>(aVal, minDigits, minLen); }
+{ return IntFmt<T, (flags & ~kFlagsBaseMask)|2>(aVal, minDigits, minLen); }
 
 template <Flags flags=0>
 auto fmtHex8(uint8_t aVal, uint8_t minDigits=2)
-{ return IntFmt<uint8_t, (flags&~kFlagsBaseMask)|16>(aVal, minDigits); }
+{ return IntFmt<uint8_t, (flags & ~kFlagsBaseMask)|16>(aVal, minDigits); }
 
 template <Flags flags=0>
 auto fmtBin8(uint8_t aVal, uint8_t minDigits=8)
-{ return IntFmt<uint8_t, (flags&~kFlagsBaseMask)|2>(aVal, minDigits); }
+{ return IntFmt<uint8_t, (flags & ~kFlagsBaseMask)|2>(aVal, minDigits); }
 
 template <Flags flags=0>
 auto fmtHex16(uint16_t aVal, uint8_t minDigits=4)
-{ return IntFmt<uint16_t, (flags&~kFlagsBaseMask)|16>(aVal, minDigits); }
+{ return IntFmt<uint16_t, (flags & ~kFlagsBaseMask)|16>(aVal, minDigits); }
 
 template <Flags flags=0>
 auto fmtBin16(uint16_t aVal, uint8_t minDigits=16)
-{ return IntFmt<uint16_t, (flags&~kFlagsBaseMask)|2>(aVal, minDigits); }
+{ return IntFmt<uint16_t, (flags & ~kFlagsBaseMask)|2>(aVal, minDigits); }
 
 template <Flags flags=16, class T>
 IntFmt<T, flags> fmtStruct(T aVal)
