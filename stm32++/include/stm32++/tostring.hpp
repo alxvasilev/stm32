@@ -72,6 +72,14 @@ struct DigitConverter<2, flags>
     static char toDigit(uint8_t digit) { return '0'+digit; }
 };
 
+template <Flags flags>
+struct DigitConverter<8, flags>
+{
+    enum { digitsPerByte = 3, prefixLen = 3 };
+    static char* putPrefix(char *buf) { buf[0] = 'O'; buf[1] = 'C'; buf[2] = 'T'; return buf+3; }
+    static char toDigit(uint8_t digit) { return '0'+digit; }
+};
+
 template<Flags flags=10, typename Val>
 typename std::enable_if<std::is_unsigned<Val>::value
                      && std::is_integral<Val>::value
