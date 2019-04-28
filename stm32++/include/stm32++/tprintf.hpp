@@ -20,12 +20,6 @@ struct IPrintSink
     virtual bool isAsync() const { return false; }
     virtual void print(const char* str, size_t len, int fd=1) = 0;
 };
-struct IAsyncPrintSink: IPrintSink
-{
-    virtual char* malloc(size_t size) = 0;
-    virtual char* realloc(void* buf, size_t newSize) = 0;
-    virtual bool isAsync() const { return true; }
-};
 
 extern IPrintSink* gPrintSink;
 
