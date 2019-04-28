@@ -13,7 +13,7 @@ enum: uint8_t {
 
 size_t bkpt(size_t cmd, size_t arg1);
 
-void fputs(const char* str, size_t len, int fd, void* userp);
+void fputs(const char* str, size_t len, int fd);
 void write(void* buf, size_t bufsize, int fd=1);
 
 /** @brief Reads a char from semihosting stdin and returns it. If the stdin

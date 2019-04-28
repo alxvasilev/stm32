@@ -225,18 +225,29 @@ struct NumLenForBase
 {
   enum: uint8_t { value = sizeof(T)*(uint8_t)(log10f(256)/log10f(base)+0.9) };
 };
+/**
+ * @param flags
+ * - The lower 8 bits are the numeric base for the conversion, i.e.
+ *   10 for decimal format, 16 for hex, 2 for binary. Arbitrary values are supported
+ * - \c kUpperCase = 0x1000 - use upper case where applicable
+ * - \c kDontNullTerminate = 0x0200 - don't null-terminate the resulting string
+ * - \c kNoPrefix = 0x0400 - don't include the numberic system prefix, i.e. 0x for hex
+ * @param minDigits The minimum number of digits to display. If the actual digits
+ * are less, zeroes are prepended to the number
+ * @param minLen The minimum number of chars in the resulting number string.
+ * If the actual chars are fewer after applying \c minDigits, spaces are appended to the string.
+ */
+template <Flags flags=0, class T>
+IntFmt<T, flags> fmtInt(T aVal, uint8_t minDigits=0, uint8_t minLen=0)
+{ return IntFmt<T, flags>(aVal, minDigits, minLen); }
 
 template <Flags flags=0, class T>
-IntFmt<T, flags> fmtInt(T aVal, uint8_t minDigits=0, uint8_t minSpaces=0)
-{ return IntFmt<T, flags>(aVal, minDigits, minSpaces); }
+auto fmtHex(T aVal, uint8_t minDigits=0, uint8_t minLen=0)
+{ return IntFmt<T, (flags&~kFlagsBaseMask)|16>(aVal, minDigits, minLen); }
 
 template <Flags flags=0, class T>
-auto fmtHex(T aVal, uint8_t minDigits=0, uint8_t minSpaces=0)
-{ return IntFmt<T, (flags&~kFlagsBaseMask)|16>(aVal, minDigits, minSpaces); }
-
-template <Flags flags=0, class T>
-auto fmtBin(T aVal, uint8_t minDigits=0, uint8_t minSpaces=0)
-{ return IntFmt<T, (flags&~kFlagsBaseMask)|2>(aVal, minDigits, minSpaces); }
+auto fmtBin(T aVal, uint8_t minDigits=8, uint8_t minLen=0)
+{ return IntFmt<T, (flags&~kFlagsBaseMask)|2>(aVal, minDigits, minLen); }
 
 template <Flags flags=0>
 auto fmtHex8(uint8_t aVal, uint8_t minDigits=2)
@@ -418,6 +429,16 @@ struct FpFmt
     FpFmt(T aVal, uint8_t aMinDigits): value(aVal), minDigits(aMinDigits){}
 };
 
+/**
+ * Specifies that a number must be formatted as floating point
+ * @param aFlags - the formatting flags, where the low 8 bits specify the floating
+ * point precision, i.e. the minimum number of digits after the decimal point.
+ * If the actual digits are fewer, then zeroes are appended
+ * @param minDigits - the minimum number of digits for the whole part of the number
+ * (before the decimal point). If the actual digits are fewer, zeroes are prepended
+ * to the whole part of the number.
+ *
+ */
 template <Flags aFlags=6, class T>
 auto fmtFp(T val, uint8_t minDigits=0)
 {

@@ -1,44 +1,21 @@
-#include <stm32++/snprint.hpp>
-
-#ifndef TPRINTF_NOT_EMBEDDED
+#include <stm32++/tprintf.hpp>
+#ifndef STM32PP_NOT_EMBEDDED
     #include <stm32++/semihosting.hpp>
-    PrintSinkFunc gPrintSinkFunc = shost::fputs;
 #else
     #include <unistd.h>
-    void standardPuts(int fd, const char* str, size_t len, void* userp)
-    {
-        write(fd, str, len);
-    }
-    PrintSinkFunc gPrintSinkFunc = standardPuts;
 #endif
 
-void* gPrintSinkUserp = nullptr;
-uint8_t gPrintSinkFlags = 0;
-
-void setPrintSink(PrintSinkFunc func, void* userp, uint8_t flags)
+struct DefaultPrintSink: public IPrintSink
 {
-    gPrintSinkFunc = func;
-    gPrintSinkUserp = userp;
-    gPrintSinkFlags = flags;
-}
-
-// Trivial case for the tsnprintf recursion.
-char* tsnprintf(char* buf, size_t bufsize, const char* fmtStr)
-{
-    if (!buf)
-        return nullptr;
-
-    char* bufend = buf+bufsize-1;
-    while (*fmtStr)
+    void print(const char* str, size_t len, int fd)
     {
-        if (buf >= bufend)
-        {
-            assert(buf == bufend);
-            *buf = 0;
-            return nullptr;
-        }
-        *(buf++) = *(fmtStr++);
+#ifndef STM32PP_NOT_EMBEDDED
+        shost::fputs(str, len, fd);
+#else
+        ::write(fd, str, len);
+#endif
     }
-    *buf = 0;
-    return buf;
-}
+};
+
+DefaultPrintSink gDefaultPrintSink;
+IPrintSink* gPrintSink = &gDefaultPrintSink;

@@ -1,4 +1,4 @@
-#include <stm32++/snprint.hpp>
+//#include <stm32++/snprint.hpp>
 #include <stm32++/semihosting.hpp>
 
 #ifdef NOT_EMBEDDED
@@ -35,7 +35,7 @@ void write(const void* buf, size_t bufsize, int fd)
     bkpt(SYS_WRITE, (size_t)msg);
 }
 
-void fputs(const char* str, size_t len, int fd, void* userp)
+void fputs(const char* str, size_t len, int fd)
 {
     write(str, len, fd);
 }
