@@ -6,7 +6,7 @@ MARK="\033[1;30m"
 NOMARK="\033[0;0m"
 ERR="\033[0;31m"
 
-STM_VERSION=1
+STM_VERSION=1_bluepill
 
 if [ "$#" -lt "1" ]; then
     echo -e "OpenOCD command client. Usage:\n\
@@ -16,7 +16,7 @@ fi
 
 owndir=`echo "$(cd $(dirname "${BASH_SOURCE[0]}"); pwd)"`
 in="$owndir/openocd.stdin"
-# out="$owndir/openocd.stdout"
+#out="$owndir/openocd.stdout"
 
 pid=`pidof openocd`
 if [ -z $pid ]; then
@@ -61,7 +61,7 @@ if [ -z $pid ]; then
     echo -e "${MARK}OpenOCD telnet port detected, openOCD pid is $pid, proceeding with command(s)${NOMARK}"
 
     # Disable openocd outputting stuff to the terminal that started it
-#    echo -e "log_output /dev/null\nexit" | (nc localhost 4444 2>&1) > /dev/null
+    echo -e "log_output /dev/null\nexit" | (nc localhost 4444 2>&1) > /dev/null
 fi
 
 # exit should go on another line, because if there is an error in the user

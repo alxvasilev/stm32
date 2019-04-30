@@ -5,9 +5,8 @@
 function printUsage
 {
     echo -e "\nOpenOCD flash image command. Usage:\n\
-    flash.sh [-e|--elf] [-h|--halt] <image[.elf]>\n\
-    -e --elf Flash the file as an ELF image. This is implied\n\
-    if the file extension is .elf\n\
+    flash.sh [-v|--verify] [-h|--halt] <image[.elf]>\n\
+    -v --verify - Verify written image\n\
     -h --halt - Do not reset after flashing the image\n\
     --help Print this help\n"
 }
@@ -23,8 +22,8 @@ while [[ $# > 0 ]]
 do
     key="$1"
     case $key in
-    -e|--elf)
-        elf=1
+    -v|--verify)
+        verify="verify"
         ;;
     -h|--halt)
         hlt=1
@@ -60,8 +59,8 @@ if [ ! -f "$fname" ]; then
 fi
 
 if [ "$hlt" != "1" ]; then
-    rst="; reset"
+    rst="reset"
 fi
 
 fname=`readlink -f "$fname"`
-$owndir/ocmd.sh "reset halt; flash write_image erase $fname $rst; exit"
+$owndir/ocmd.sh "program $fname $verify $rst"
