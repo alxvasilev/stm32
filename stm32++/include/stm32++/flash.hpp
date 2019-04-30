@@ -387,7 +387,7 @@ public:
         return true;
     }
     template <typename T>
-    T getValue(uint8_t key, T defaultVal)
+    T getValueOrDefault(uint8_t key, T defaultVal)
     {
         uint8_t size;
         auto ptr = getRawValue(key, size);
