@@ -23,7 +23,7 @@ do
     key="$1"
     case $key in
     -v|--verify)
-        verify="verify"
+        verify="1"
         ;;
     -h|--halt)
         hlt=1
@@ -59,8 +59,18 @@ if [ ! -f "$fname" ]; then
 fi
 
 if [ "$hlt" != "1" ]; then
-    rst="reset"
+    rst="; reset"
+fi
+# The 'program' openOCD command prevents semihosting from working after flashing
+# (semihosting requests hang), until openOCD is restarted. That's why we don't use that
+# command
+fname=`readlink -f "$fname"`
+$owndir/ocmd.sh "reset halt; flash write_image erase $fname; exit"
+
+if [ "$verify" == "1" ]; then
+    $owndir/ocmd.sh "verify_image $fname; exit"
 fi
 
-fname=`readlink -f "$fname"`
-$owndir/ocmd.sh "program $fname $verify $rst"
+if [ "$hlt" != "1" ]; then
+    $owndir/ocmd.sh "reset run; exit"
+fi
