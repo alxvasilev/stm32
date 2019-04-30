@@ -367,6 +367,45 @@ public:
             }
         }
     }
+    template <typename T>
+    bool getValue(uint8_t key, T& val)
+    {
+        uint8_t size;
+        auto ptr = getRawValue(key, size);
+        if (!ptr || size != sizeof(T))
+        {
+            return false;
+        }
+        if (sizeof(T) <= 2)
+        {
+            val = *(T*)(ptr);
+        }
+        else
+        {
+            memcpy(&val, ptr, size);
+        }
+        return true;
+    }
+    template <typename T>
+    T getValue(uint8_t key, T defaultVal)
+    {
+        uint8_t size;
+        auto ptr = getRawValue(key, size);
+        if (!ptr || size != sizeof(T))
+        {
+            return defaultVal;
+        }
+        if (sizeof(T) <= 2)
+        {
+            return *(T*)(ptr);
+        }
+        else
+        {
+            T val;
+            memcpy(&val, ptr, size);
+            return val;
+        }
+    }
     uint16_t pageBytesFree() const
     {
         return Driver::pageSize() - (mDataEnd - mActivePage) - PageInfo::kMagicLen - 2;
@@ -439,6 +478,11 @@ public:
             return false;
         }
         return true;
+    }
+    template <typename T>
+    bool setValue(uint8_t key, T val, bool isEmergency=false)
+    {
+        return setValue(key, &val, sizeof(T), isEmergency);
     }
 protected:
     /**
