@@ -3,7 +3,15 @@
 
 #include <stddef.h>
 #include <stdint.h>
-
+#ifdef __arm__
+    #include <libopencm3/stm32/flash.h>
+#else
+    #include <assert.h>
+    #include <memory.h>
+    #include <stdio.h>
+#endif
+namespace flash
+{
 template <typename T> bool addressIsEven(T* addr)
 { return ((((size_t)addr) & 0x1) == 0); }
 
@@ -11,8 +19,6 @@ template <typename T>
 static inline uint16_t roundToNextEven(T x) { return ((uint16_t)x + 1) & (~0x1); }
 
 #ifdef __arm__
-#include <libopencm3/stm32/flash.h>
-
 #define STM32PP_FLASH_LOG(fmtString,...) tprintf("FLASH: " fmtString "\n", ##__VA_ARGS__)
 
 struct DefaultFlashDriver
@@ -130,11 +136,6 @@ struct DefaultFlashDriver
 };
 #else
 // x86, test mode
-#include <stddef.h> // for size_t
-#include <assert.h>
-#include <memory.h>
-#include <stdio.h>
-
 #define STM32PP_FLASH_LOG(fmtString,...) printf("FLASH: " fmtString "\n", ##__VA_ARGS__)
 
 // This is a simulator used for testing the library, on a pc
@@ -582,4 +583,5 @@ FlashPageInfo<Driver>::FlashPageInfo(uint8_t* aPage)
     validateError = kErrNone;
 }
 
+}
 #endif

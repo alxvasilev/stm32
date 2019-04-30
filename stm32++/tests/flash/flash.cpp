@@ -1,6 +1,7 @@
 #define STM32PP_FLASH_SIMULATE_POWER_LOSS
 #include <stm32++/flash.hpp>
 #include <string>
+using namespace flash;
 
 uint16_t page1[512];
 uint16_t page2[512];
