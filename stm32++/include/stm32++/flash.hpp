@@ -337,9 +337,21 @@ public:
             if (key == entryKey)
             {
                 size = *(ptr-2);
-                return size
-                    ? (ptr - 2 - roundToNextEven(size))
-                    : nullptr;
+                if (!size)
+                {
+                    return nullptr;
+                }
+                if (size & 1) // odd size, we have a padding byte, verify it
+                {
+                    if (*(ptr - 3) == 0) // data is incomplete (due to power loss?), skip this entry
+                    {
+                        return ptr - 3 - size;
+                    }
+                }
+                else // no way to verify data completeness if data size is even
+                {
+                    return (ptr - 2 - size);
+                }
             }
             ptr = getPrevEntryEnd(ptr, mActivePage);
             if (!ptr)

@@ -50,7 +50,15 @@ std::string values[] = {
     "Incorrect. Since printf is a variadic function, arguments of type char or unsigned char are promoted to int",
     "unsigned char gets promoted to int because printf() is a variadic function (assuming <stdio.h> is included). If the header isn't included, then (a) it should be and (b) you don't have a prototype in scope so the unsigned char will still be promoted to int",
     "Here, you specify the length as an int argument to printf(), which treats the '*' in the format as a request to get the length from an argument.",
-    "shouldn't be necessary unless the compiler is far more broken than not implicitly converting char arguments to int."
+    "shouldn't be necessary unless the compiler is far more broken than not implicitly converting char arguments to int.",
+
+    "to an action method in the Controller and this action method populates the list of service items and",
+    "returns it back to the AJAX call via response. This is where my AJAX call is failing.",
+    "If i have about 100 - 500 items, the ajax call works. How do I fix this issue?",
+    "Here, you specify the length as an int argument to printf(), which treats the '*' in the format as a request to get the length from an argument.",
+    "shouldn't be necessary unless the compiler is far more broken than not implicitly converting char arguments to int.",
+    "suggests that it is in fact not doing the conversion, and picking up the other 8 bits from trash on the stack or left over in a register",
+
 };
 bool setString(uint8_t key, const std::string& val)
 {
