@@ -1,6 +1,9 @@
 #if !defined(SEMIHOSTING_HPP) && !defined(NOT_EMBEDDED)
 #define SEMIHOSTING_HPP
 
+#include <stdint.h>
+#include <stddef.h> // for size_t
+
 namespace shost
 {
 /** @brief Semihosting opcodes */
@@ -14,7 +17,7 @@ enum: uint8_t {
 size_t bkpt(size_t cmd, size_t arg1);
 
 void fputs(const char* str, size_t len, int fd);
-void write(void* buf, size_t bufsize, int fd=1);
+void write(const void* buf, size_t bufsize, int fd=1);
 
 /** @brief Reads a char from semihosting stdin and returns it. If the stdin
  * is not connected, -1 is returned (EOF).

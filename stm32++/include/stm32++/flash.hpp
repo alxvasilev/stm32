@@ -3,13 +3,29 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <assert.h>
+#include <string.h> // for memcmp()
 #ifdef __arm__
     #include <libopencm3/stm32/flash.h>
+    #include <libopencm3/stm32/desig.h>
+
+    #ifdef STM32PP_FLASH_DEBUG
+        #include <stm32++/tprintf.hpp>
+        #define STM32PP_FLASH_LOG(fmtString,...) tprintf("FLASH: " fmtString "\n", ##__VA_ARGS__)
+    #else
+        #define STM32PP_FLASH_LOG(fmtString,...)
+    #endif
 #else
     #include <assert.h>
     #include <memory.h>
     #include <stdio.h>
+    #define STM32PP_FLASH_LOG(fmtString,...) printf("FLASH: " fmtString "\n", ##__VA_ARGS__)
 #endif
+
+#define STM32PP_FLASH_LOG_ERROR(fmtString,...) STM32PP_FLASH_LOG("ERROR: " fmtString, ##__VA_ARGS__)
+#define STM32PP_FLASH_LOG_WARNING(fmtString,...) STM32PP_FLASH_LOG("WARN: " fmtString, ##__VA_ARGS__)
+#define STM32PP_FLASH_LOG_DEBUG(fmtString,...) STM32PP_FLASH_LOG("DEBUG: " fmtString, ##__VA_ARGS__)
+
 namespace flash
 {
 template <typename T> bool addressIsEven(T* addr)
@@ -19,8 +35,6 @@ template <typename T>
 static inline uint16_t roundToNextEven(T x) { return ((uint16_t)x + 1) & (~0x1); }
 
 #ifdef __arm__
-#define STM32PP_FLASH_LOG(fmtString,...) tprintf("FLASH: " fmtString "\n", ##__VA_ARGS__)
-
 struct DefaultFlashDriver
 {
     class WriteUnlocker
@@ -72,39 +86,39 @@ struct DefaultFlashDriver
     | FLASH_SR_ERSERR
 #endif
     };
-    uint16_t pageSize() const
+    static uint16_t pageSize()
     {
         static const uint16_t flashPageSize = DESIG_FLASH_SIZE << 10;
         return flashPageSize;
     }
-    bool write16(uint8_t* addr, uint16_t data)
+    static bool write16(uint8_t* addr, uint16_t data)
     {
         assert(addressIsEven(addr));
-        flash_program_half_word(addr, data);
+        flash_program_half_word((uint32_t)addr, data);
         return (*(uint16_t*)(addr) == data);
     }
-    bool write16Block(uint8_t* dest, const uint8_t* src, uint16_t wordCnt)
+    static bool write16Block(uint8_t* dest, const uint8_t* src, uint16_t wordCnt)
     {
-        assert((dest & 0x1) == 0);
-        assert((src & 0x1) == 0);
+        assert(((uint32_t)dest & 0x1) == 0);
+        assert(((uint32_t)src & 0x1) == 0);
         uint16_t* wptr = (uint16_t*)dest;
         uint16_t* rptr = (uint16_t*)src;
         uint16_t* rend = rptr + wordCnt;
         for (; rptr < rend; rptr++, wptr++)
         {
-            flash_program_half_word(wptr, *data);
-            if (*wptr != *data)
+            flash_program_half_word((uint32_t)wptr, *rptr);
+            if (*wptr != *rptr)
             {
                 return false;
             }
         }
         return true;
     }
-    void clearStatusFlags()
+    static void clearStatusFlags()
     {
         flash_clear_status_flags();
     }
-    uint32_t errorFlags()
+    static uint32_t errorFlags()
     {
         uint32_t flags = FLASH_SR;
         if (DESIG_FLASH_SIZE > 512)
@@ -116,7 +130,7 @@ struct DefaultFlashDriver
     static bool erasePage(uint8_t* page)
     {
         assert(((size_t)page) % 4 == 0);
-        flash_erase_page(page);
+        flash_erase_page((uint32_t)page);
         auto err = errorFlags();
         if (err)
         {
@@ -130,15 +144,15 @@ struct DefaultFlashDriver
             {
                 STM32PP_FLASH_LOG_ERROR("erasePage: Page contains a byte that is not 0xff after erase");
                 return false;
+            }
         }
         return true;
     }
 };
 #else
 // x86, test mode
-#define STM32PP_FLASH_LOG(fmtString,...) printf("FLASH: " fmtString "\n", ##__VA_ARGS__)
-
 // This is a simulator used for testing the library, on a pc
+
 struct DefaultFlashDriver
 {
     class WriteUnlocker
@@ -181,10 +195,6 @@ struct DefaultFlashDriver
     }
 };
 #endif
-
-#define STM32PP_FLASH_LOG_ERROR(fmtString,...) STM32PP_FLASH_LOG("ERROR: " fmtString, ##__VA_ARGS__)
-#define STM32PP_FLASH_LOG_WARNING(fmtString,...) STM32PP_FLASH_LOG("WARN: " fmtString, ##__VA_ARGS__)
-#define STM32PP_FLASH_LOG_DEBUG(fmtString,...) STM32PP_FLASH_LOG("DEBUG: " fmtString, ##__VA_ARGS__)
 
 template <class Driver>
 struct FlashPageInfo
