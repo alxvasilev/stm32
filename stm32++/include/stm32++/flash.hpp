@@ -6,6 +6,9 @@
 #include <assert.h>
 #include <string.h> // for memcmp()
 #ifdef __arm__
+    #if CHIP_TYPE != STM32
+        #error Unsupported chip type (CHIP_TYPE can only be STM32)
+    #endif
     #include <libopencm3/stm32/flash.h>
     #include <libopencm3/stm32/desig.h>
 
@@ -88,7 +91,7 @@ struct DefaultFlashDriver
     };
     static uint16_t pageSize()
     {
-        static const uint16_t flashPageSize = DESIG_FLASH_SIZE << 10;
+        static const uint16_t flashPageSize = (DESIG_FLASH_SIZE < 256) ? 1024 : 2048;
         return flashPageSize;
     }
     static bool write16(uint8_t* addr, uint16_t data)

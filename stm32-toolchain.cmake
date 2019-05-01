@@ -61,7 +61,7 @@ you can just use tprint()")
 set(optStdioLibcInRelease 0 CACHE BOOL
 "In RELEASE mode, use the stdio-enabled standard C library")
 
-add_definitions(-D${optChipFamily} -Wall)
+add_definitions(-DCHIP_TYPE=STM32 -D${optChipFamily} -Wall)
 include_directories("${CMAKE_CURRENT_LIST_DIR}/stm32++/include")
 set(CMAKE_EXE_LINKER_FLAGS "-nostartfiles -T${optLinkScript} ${linkDirs}" CACHE STRING "")
 
