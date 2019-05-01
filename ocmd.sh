@@ -64,13 +64,18 @@ if [ -z $pid ]; then
     echo -e "log_output /dev/null\nexit" | (nc localhost 4444 2>&1) > /dev/null
 fi
 
-# exit should go on another line, because if there is an error in the user
+# 'exit' should go on another line, because if there is an error in the user
 # command, the exit command will be ignored
+# The network protocol is telnet and openOCD's response contains a binary header,
+# which appears as junk on the console. That's why we skip it with the tail filter
+
 echo -e "$@\nexit" | (nc localhost 4444) | tail -n +2
 
-# openocd outputs its response to the console, and this script may terminate
-# before openocd has finished printing. In that case, the propmt will appear
-# and the openocd output after it, so the user will get confused. To fix that,
-# wait a bit before returning to the prompt
+# openocd kills the telnet connection only when it reaches the 'exit' command,
+# and netcat blocks until the connection is alive. So, we effectively block until
+# the command(s) are executed. Still, openocd may continue printing for a bit after
+# it drops the telnet connection. In that case, the shell propmt will appear and
+# the openocd output after it, so the user will get confused. To fix that,
+# wait a bit before terminating this script and returning to the prompt
 sleep 0.1
 exit 0
