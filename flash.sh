@@ -65,12 +65,15 @@ fi
 # (semihosting requests hang), until openOCD is restarted. That's why we don't use that
 # command
 fname=`readlink -f "$fname"`
-$owndir/ocmd.sh "reset halt; flash write_image erase $fname; exit"
+
+cmd="reset halt; flash write_image erase $fname"
 
 if [ "$verify" == "1" ]; then
-    $owndir/ocmd.sh "verify_image $fname; exit"
+    cmd="$cmd; verify_image $fname"
 fi
 
 if [ "$hlt" != "1" ]; then
-    $owndir/ocmd.sh "reset run; exit"
+    cmd="$cmd; reset run"
 fi
+
+$owndir/ocmd.sh "$cmd"
