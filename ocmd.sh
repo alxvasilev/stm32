@@ -7,6 +7,7 @@ NOMARK="\033[0;0m"
 ERR="\033[0;31m"
 
 STM_VERSION=1_bluepill
+#STM_VERSION=1
 
 if [ "$#" -lt "1" ]; then
     echo -e "OpenOCD command client. Usage:\n\
