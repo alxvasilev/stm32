@@ -113,7 +113,7 @@ toString(char* buf, size_t bufsize, Val val, uint8_t minDigits=0, uint16_t minLe
         padLen = 0;
     }
     size_t totalLen;
-    if (((flags & kNoPrefix) == 0) && digitConv.prefixLen)
+    if (((flags & kNoPrefix) == 0) && (digitConv.prefixLen != 0))
     {
         totalLen = digitConv.prefixLen+padLen+numDigits;
         if (bufsize < totalLen)
