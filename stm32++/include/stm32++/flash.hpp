@@ -453,16 +453,16 @@ public:
         uint16_t bytesNeeded = 2 + roundToNextEven(len);
         if (bytesNeeded > bytesFree)
         {
-            STM32PP_FLASH_LOG_DEBUG("Not enough space in page%d to write value, switching to other page and compacting", activePageId());
+            STM32PP_FLASH_LOG_DEBUG("Not enough space in page% to write value, switching to other page and compacting", activePageId());
             if (!compact()) // should log error message
             {
                 return false;
             }
-            STM32PP_FLASH_LOG_DEBUG("Compacted to %d bytes\n", Driver::pageSize()-pageBytesFree());
+            STM32PP_FLASH_LOG_DEBUG("Compacted to % bytes\n", Driver::pageSize()-pageBytesFree());
             bytesFree = pageBytesFree();
             if (bytesNeeded > bytesFree)
             {
-                STM32PP_FLASH_LOG_ERROR("Not enough space to write value even after compacting: available: %d, required %d bytes", bytesFree, bytesNeeded);
+                STM32PP_FLASH_LOG_ERROR("Not enough space to write value even after compacting: available: %, required % bytes", bytesFree, bytesNeeded);
                 return false;
             }
         }
