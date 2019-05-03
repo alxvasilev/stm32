@@ -287,7 +287,7 @@ template <Flags flags=0, class P>
 typename std::enable_if<std::is_pointer<P>::value && !is_char_ptr<P>::value, char*>::type
 toString(char *buf, size_t bufsize, P ptr)
 {
-    return toString(buf, bufsize, fmtHex<flags>(ptr));
+    return toString(buf, bufsize, fmtHex(ptr, sizeof(void*) * 2));
 }
 
 template<Flags flags=0, Flags fmtFlags, typename Val>
