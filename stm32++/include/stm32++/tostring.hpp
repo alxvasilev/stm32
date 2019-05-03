@@ -272,6 +272,9 @@ template <Flags flags=0>
 auto fmtHex16(uint16_t aVal, uint8_t minDigits=4)
 { return IntFmt<uint16_t, (flags & ~kFlagsBaseMask)|16>(aVal, minDigits); }
 
+template <Flags flags=0, typename Ptr>
+auto fmtPtr(Ptr ptr) { return fmtHex(ptr, sizeof(void*) * 2); }
+
 template <Flags flags=0>
 auto fmtBin16(uint16_t aVal, uint8_t minDigits=16)
 { return IntFmt<uint16_t, (flags & ~kFlagsBaseMask)|2>(aVal, minDigits); }
@@ -287,7 +290,7 @@ template <Flags flags=0, class P>
 typename std::enable_if<std::is_pointer<P>::value && !is_char_ptr<P>::value, char*>::type
 toString(char *buf, size_t bufsize, P ptr)
 {
-    return toString(buf, bufsize, fmtHex(ptr, sizeof(void*) * 2));
+    return toString(buf, bufsize, fmtPtr(ptr));
 }
 
 template<Flags flags=0, Flags fmtFlags, typename Val>

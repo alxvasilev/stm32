@@ -98,7 +98,15 @@ struct DefaultFlashDriver
     {
         assert(addressIsEven(addr));
         flash_program_half_word((uint32_t)addr, data);
-        return (*(uint16_t*)(addr) == data);
+        bool ret = (*(uint16_t*)(addr) == data);
+#ifdef STM32PP_FLASH_DEBUG
+        if (!ret) {
+            STM32PP_FLASH_LOG_ERROR("write16: Error verifying written half word at address %. Expected %, got %",
+                fmtPtr(addr), fmtHex16(data), fmtHex16(*(uint16_t*)(addr)));
+            assert(false);
+        }
+#endif
+        return ret;
     }
     static bool write16Block(uint8_t* dest, const uint8_t* src, uint16_t wordCnt)
     {
@@ -319,6 +327,7 @@ public:
             else // both pages invalid
             {
                 STM32PP_FLASH_LOG_WARNING("No page is initialized, initializing and using page1");
+                typename Driver::WriteUnlocker unlock(info1.page);
                 Driver::erasePage(info1.page);
                 writePageCtrAndMagic(info1.page, 1);
                 mActivePage = mDataEnd = info1.page;
@@ -424,7 +433,7 @@ public:
         return Driver::pageSize() - (mDataEnd - mActivePage) - PageInfo::kMagicLen - 2;
     }
     uint8_t activePageId() const { return (mActivePage == mPage1) ? 1 : 2; }
-    bool setValue(uint8_t key, const void* data, uint8_t len, bool isEmergency=false)
+    bool setRawValue(uint8_t key, const void* data, uint8_t len, bool isEmergency=false)
     {
         if (key == 0xff)
         {
@@ -487,7 +496,7 @@ public:
         auto err = Driver::errorFlags();
         if (err)
         {
-            STM32PP_FLASH_LOG_ERROR("Error writing value: %x", err);
+            STM32PP_FLASH_LOG_ERROR("Error writing value: errflags: %", fmtHex(err));
             return false;
         }
         return true;
@@ -598,7 +607,7 @@ protected:
             if ((flags & mask) == 0)
             {
                 flags |= mask;
-                setValue(key, data, len, true);
+                setRawValue(key, data, len, true);
             }
             srcEnd = data;
         }
