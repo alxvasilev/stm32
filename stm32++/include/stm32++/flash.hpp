@@ -260,7 +260,7 @@ struct FlashPageInfo
 };
 
 template<class Driver=DefaultFlashDriver>
-class FlashValueStore
+class KeyValueStore
 {
 protected:
     using PageInfo = FlashPageInfo<Driver>;
@@ -433,7 +433,7 @@ public:
         return Driver::pageSize() - (mDataEnd - mActivePage) - PageInfo::kMagicLen - 2;
     }
     uint8_t activePageId() const { return (mActivePage == mPage1) ? 1 : 2; }
-    bool setRawValue(uint8_t key, const void* data, uint8_t len, bool isEmergency=false)
+    bool setRawValueUncond(uint8_t key, const void* data, uint8_t len, bool isEmergency=false)
     {
         if (key == 0xff)
         {
@@ -500,6 +500,17 @@ public:
             return false;
         }
         return true;
+    }
+    bool setRawValue(uint8_t key, const void* data, uint8_t len, bool isEmergency=false)
+    {
+        uint8_t existingLen;
+        auto existingData = getRawValue(key, existingLen);
+        if (existingData && (existingLen == len) && memcmp(data, existingData, len) == 0)
+        {
+            STM32PP_FLASH_LOG_DEBUG("setRawValue: Value with key % already exists and is same", fmtHex8(key));
+            return true;
+        }
+        return setRawValueUncond(key, data, len, isEmergency);
     }
     template <typename T>
     bool setValue(uint8_t key, T val, bool isEmergency=false)
@@ -607,7 +618,7 @@ protected:
             if ((flags & mask) == 0)
             {
                 flags |= mask;
-                setRawValue(key, data, len, true);
+                setRawValueUncond(key, data, len, true);
             }
             srcEnd = data;
         }
@@ -641,13 +652,13 @@ FlashPageInfo<Driver>::FlashPageInfo(uint8_t* aPage)
         validateError = kErrCounter;
         return;
     }
-    if (!FlashValueStore<Driver>::verifyAllEntries(dataEnd, page))
+    if (!KeyValueStore<Driver>::verifyAllEntries(dataEnd, page))
     {
         validateError = kErrData;
         return;
     }
     validateError = kErrNone;
 }
-
 }
+
 #endif
