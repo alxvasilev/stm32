@@ -57,14 +57,6 @@ public:
         }
         while(get() < tsEnd);
     }
-#ifndef NO_DWT_CTR_START
-protected:
-    struct Initializer
-    {
-        Initializer() { dwt_enable_cycle_counter(); }
-    };
-    static Initializer mInitializer;
-#endif
 };
 
 // Should never be actually instantiated with negative values,
