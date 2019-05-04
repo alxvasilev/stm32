@@ -108,23 +108,6 @@ struct DefaultFlashDriver
 #endif
         return ret;
     }
-    static bool write16Block(uint8_t* dest, const uint8_t* src, uint16_t wordCnt)
-    {
-        assert(((uint32_t)dest & 0x1) == 0);
-        assert(((uint32_t)src & 0x1) == 0);
-        uint16_t* wptr = (uint16_t*)dest;
-        uint16_t* rptr = (uint16_t*)src;
-        uint16_t* rend = rptr + wordCnt;
-        for (; rptr < rend; rptr++, wptr++)
-        {
-            flash_program_half_word((uint32_t)wptr, *rptr);
-            if (*wptr != *rptr)
-            {
-                return false;
-            }
-        }
-        return true;
-    }
     static void clearStatusFlags()
     {
         flash_clear_status_flags();
@@ -184,19 +167,6 @@ struct DefaultFlashDriver
         return true;
     }
     static uint16_t pageSize() { return 1024; }
-    static bool write16Block(uint8_t* dest, const uint8_t* src, uint16_t wordCnt)
-    {
-        assert(addressIsEven(dest));
-//      assert(addressIsEven(src));
-        for (auto srcEnd = src + wordCnt * 2; src < srcEnd; src+=2, dest+=2)
-        {
-            if (!write16(dest, *((uint16_t*)src)))
-            {
-                return false;
-            }
-        }
-        return true;
-    }
     static uint32_t errorFlags() { return 0; }
     static void clearStatusFlags() {}
     static bool erasePage(uint8_t* page)
@@ -264,6 +234,7 @@ class KeyValueStore
 {
 protected:
     using PageInfo = FlashPageInfo<Driver>;
+    typedef typename Driver::WriteUnlocker WriteUnlocker;
     uint8_t* mPage1 = nullptr;
     uint8_t* mPage2 = nullptr;
 
@@ -327,13 +298,27 @@ public:
             else // both pages invalid
             {
                 STM32PP_FLASH_LOG_WARNING("No page is initialized, initializing and using page1");
-                typename Driver::WriteUnlocker unlock(info1.page);
+                WriteUnlocker unlock(info1.page);
                 Driver::erasePage(info1.page);
                 writePageCtrAndMagic(info1.page, 1);
                 mActivePage = mDataEnd = info1.page;
             }
         }
         return true;
+    }
+    bool clearAllData()
+    {
+        bool ok = true;
+        {
+            WriteUnlocker unlocker(mPage1);
+            ok &= fill16Block(mPage1, 0, Driver::pageSize() / 2);
+        }
+        {
+            WriteUnlocker unlocker(mPage2);
+            ok &= fill16Block(mPage2, 0, Driver::pageSize() / 2);
+        }
+        ok &= init((size_t)mPage1, (size_t)mPage2, mReserveBytes);
+        return ok;
     }
     /**
      * @brief getRawValue
@@ -466,7 +451,7 @@ public:
                 return false;
             }
         }
-        typename Driver::WriteUnlocker unlocker(mActivePage);
+        WriteUnlocker unlocker(mActivePage);
         // data.len [pad.1] len.1 key.1
         bool ok = true;
         // First write the trailer, so that if we are are interrupted while writing
@@ -477,7 +462,7 @@ public:
         {
             if (len)
             {
-                ok &= Driver::write16Block(mDataEnd, (uint8_t*)data, len / 2);
+                ok &= write16Block(mDataEnd, (uint8_t*)data, len / 2);
             }
             mDataEnd += (len + 2);
         }
@@ -486,7 +471,7 @@ public:
             uint8_t even = len - 1;
             if (even)
             {
-                Driver::write16Block(mDataEnd, (uint8_t*)data, even / 2);
+                write16Block(mDataEnd, (uint8_t*)data, even / 2);
                 mDataEnd += even;
             }
             // write last (odd) data byte and a zero padding byte
@@ -581,7 +566,7 @@ protected:
     {
         bool ok = true;
         auto end = page + Driver::pageSize();
-        ok &= Driver::write16Block(end - PageInfo::kMagicLen, PageInfo::magic(), PageInfo::kMagicLen / 2);
+        ok &= write16Block(end - PageInfo::kMagicLen, PageInfo::magic(), PageInfo::kMagicLen / 2);
         ok &= Driver::write16(end - PageInfo::kMagicLen - sizeof(uint16_t), ctr);
         return ok;
     }
@@ -602,7 +587,7 @@ protected:
         uint8_t* srcEnd = mDataEnd; // equal to mActivePage if page is empty
 
         mActivePage = mDataEnd = otherPage;
-        typename Driver::WriteUnlocker unlocker(mActivePage);
+        WriteUnlocker unlocker(mActivePage);
         Driver::erasePage(mActivePage);
         uint32_t hadKey[8] = { 0 };
         while (srcEnd > srcPage)
@@ -630,7 +615,38 @@ protected:
         // Done writing compacted page to the new page
         return true;
     }
+    static bool write16Block(uint8_t* dest, const uint8_t* src, uint16_t wordCnt)
+    {
+        assert(((uint32_t)dest & 0x1) == 0);
+        assert(((uint32_t)src & 0x1) == 0);
+        uint16_t* wptr = (uint16_t*)dest;
+        uint16_t* rptr = (uint16_t*)src;
+        uint16_t* rend = rptr + wordCnt;
+        for (; rptr < rend; rptr++, wptr++)
+        {
+            if (!Driver::write16((uint8_t*)wptr, *rptr))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+    static bool fill16Block(uint8_t* dest, uint16_t word, uint16_t wordCnt)
+    {
+        assert(((uint32_t)dest & 0x1) == 0);
+        uint16_t* wptr = (uint16_t*)dest;
+        uint16_t* wend = wptr + wordCnt;
+        for (; wptr < wend; wptr++)
+        {
+            if (!Driver::write16((uint8_t*)wptr, word))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
 };
+
 template <class Driver>
 FlashPageInfo<Driver>::FlashPageInfo(uint8_t* aPage)
     : page(aPage), pageCtr(getPageCounter(page))

@@ -91,7 +91,6 @@ set_Property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release MinSizeRel Re
 set(STM32PP_SRCPATH "${ENV_SCRIPTS_DIR}/stm32++/src")
 set(STM32PP_SRCS
     "${STM32PP_SRCPATH}/semihosting.cpp"
-    "${STM32PP_SRCPATH}/timeutl.cpp"
     "${STM32PP_SRCPATH}/tprintf.cpp"
     "${STM32PP_SRCPATH}/tsnprintf.cpp"
 )
