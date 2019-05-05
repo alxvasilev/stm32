@@ -25,37 +25,54 @@
 
 struct IPrintSink
 {
+    struct BufferInfo
+    {
+        char* buf = nullptr;
+        size_t bufSize = 0;
+        void clear()
+        {
+            buf = nullptr;
+            bufSize = 0;
+        }
+    };
     /**
      * @brief waitReady Waits till the sink has completed the last print operation, if any
-     * @return Whether the sink is async
+     * @return Pointer to the sink's buffer info, if the sink is async.
+     * Null if the sink is synchronous
      */
-    virtual bool waitReady() const { return false; }
+    virtual BufferInfo* waitReady() const { return nullptr; }
     virtual void print(const char* str, size_t len, int fd=1) = 0;
 };
 
-struct IAsyncPrintSink: public IPrintSink
+struct AsyncPrintSink: public IPrintSink
 {
-    virtual char* detachBuffer(size_t& bufSize) = 0;
-    virtual void attachBuffer(char* buf, size_t bufSize) = 0;
+protected:
+    BufferInfo mPrintBuffer;
 };
 
 static inline IPrintSink* setPrintSink(IPrintSink* newSink)
 {
     extern IPrintSink* gPrintSink;
-    bool isAsync = gPrintSink->waitReady();
+    IPrintSink::BufferInfo* currSinkBufInfo = gPrintSink->waitReady();
+    bool isAsync = (currSinkBufInfo != nullptr);
     if (isAsync)
     {
-        size_t bufSize;
-        char* buf = static_cast<IAsyncPrintSink*>(gPrintSink)->detachBuffer(bufSize);
-        if (buf)
+        if (currSinkBufInfo->buf)
         {
-            if (newSink->waitReady())
-            { // newSink is async
-                static_cast<IAsyncPrintSink*>(newSink)->attachBuffer(buf, bufSize);
-            }
-            else
+            auto newSinkBufInfo = newSink->waitReady();
+            if (newSinkBufInfo) // newSink is async, move current async buffer to it
             {
-                free(buf);
+                if (newSinkBufInfo->buf)
+                { // newSink also has a buffer allocated, free it
+                    free(newSinkBufInfo->buf);
+                }
+                *newSinkBufInfo = *currSinkBufInfo;
+                currSinkBufInfo->clear();
+            }
+            else // newSink is synchronous, and we have an async buffer, free it
+            {
+                free(currSinkBufInfo);
+                currSinkBufInfo->clear();
             }
         }
     }
@@ -68,18 +85,29 @@ template <int InitialBufSize=64, typename... Args>
 size_t ftprintf(uint8_t fd, const char* fmtStr, Args... args)
 {
     extern IPrintSink* gPrintSink;
-    size_t bufsize = InitialBufSize;
-    bool isAsync = gPrintSink->waitReady();
     char* staticBuf; // static buf
     char* buf;
-    if (isAsync)
+    size_t bufsize;
+
+    auto async = gPrintSink->waitReady();
+    if (async)
     {
         staticBuf = nullptr;
-        buf = (char*)malloc(bufsize);
+        if (async->buf)
+        {
+            buf = async->buf;
+            bufsize = async->bufSize;
+        }
+        else
+        {
+            buf = (char*)malloc(InitialBufSize);
+            bufsize = InitialBufSize;
+        }
     }
     else
     {
-        buf = staticBuf = (char*)alloca(bufsize);
+        buf = staticBuf = (char*)alloca(InitialBufSize);
+        bufsize = InitialBufSize;
     }
     char* ret;
     for(;;)
@@ -90,11 +118,11 @@ size_t ftprintf(uint8_t fd, const char* fmtStr, Args... args)
             break;
         }
         // tsnprintf() returned nullptr, have to increase buf size
-        bufsize += isAsync ? STM32PP_TPRINTF_ASYNC_EXPAND_STEP : STM32PP_TPRINTF_SYNC_EXPAND_STEP;
+        bufsize += async ? STM32PP_TPRINTF_ASYNC_EXPAND_STEP : STM32PP_TPRINTF_SYNC_EXPAND_STEP;
         if (bufsize > STM32PP_TPRINTF_MAX_DYNAMIC_BUFSIZE)
         {
             //too much, bail out
-            if ((buf != staticBuf) && !isAsync) // buffer is dynamic and synchronous, free it
+            if ((buf != staticBuf) && !async) // buffer is dynamic and synchronous, free it
             {
                 free(buf);
             }
@@ -112,7 +140,7 @@ size_t ftprintf(uint8_t fd, const char* fmtStr, Args... args)
     }
     size_t size = ret-buf;
     gPrintSink->print(buf, size, fd);
-    if ((buf != staticBuf) && !isAsync)
+    if ((buf != staticBuf) && !async)
     {
         free(buf);
     }
