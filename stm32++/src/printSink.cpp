@@ -1,4 +1,4 @@
-#include <stm32++/tprintf.hpp>
+#include <stm32++/printSink.hpp>
 #ifndef STM32PP_NOT_EMBEDDED
     #include <stm32++/semihosting.hpp>
 #else
@@ -7,6 +7,7 @@
 
 struct DefaultPrintSink: public IPrintSink
 {
+    IPrintSink::BufferInfo* waitReady() { return nullptr; }
     void print(const char* str, size_t len, int fd)
     {
 #ifndef STM32PP_NOT_EMBEDDED

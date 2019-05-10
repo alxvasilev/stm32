@@ -13,8 +13,8 @@ set(CMAKE_CXX_COMPILER arm-none-eabi-g++)
 set(CMAKE_ASM_COMPILER arm-none-eabi-as)
 set(CMAKE_LINKER arm-none-eabi-ld)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-common -fno-exceptions -fno-rtti -mcpu=cortex-m3 -mthumb -nostartfiles" CACHE STRING "")
-set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS} -std=c++14" CACHE STRING "")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-common -mcpu=cortex-m3 -mthumb -nostartfiles -Wall" CACHE STRING "")
+set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS} -std=c++14 -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-threadsafe-statics" CACHE STRING "")
 set(CMAKE_C_FLAGS_DEBUG "-g -O0" CACHE STRING "")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0" CACHE STRING "")
 
@@ -61,7 +61,7 @@ you can just use tprint()")
 set(optStdioLibcInRelease 0 CACHE BOOL
 "In RELEASE mode, use the stdio-enabled standard C library")
 
-add_definitions(-DCHIP_TYPE=STM32 -D${optChipFamily} -fno-use-cxa-atexit -fno-threadsafe-statics -Wall)
+add_definitions(-DCHIP_TYPE=STM32 -D${optChipFamily})
 include_directories("${CMAKE_CURRENT_LIST_DIR}/stm32++/include")
 set(CMAKE_EXE_LINKER_FLAGS "-nostartfiles -T${optLinkScript} ${linkDirs}" CACHE STRING "")
 
@@ -88,12 +88,14 @@ set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type")
 set_Property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release MinSizeRel RelWithDebInfo)
 
 # Utilities to facilitate user CMakeLists
-set(STM32PP_SRCPATH "${ENV_SCRIPTS_DIR}/stm32++/src")
-set(STM32PP_SRCS
-    "${STM32PP_SRCPATH}/semihosting.cpp"
-    "${STM32PP_SRCPATH}/tprintf.cpp"
-    "${STM32PP_SRCPATH}/tsnprintf.cpp"
-)
+if (optUseOpencm3)
+    set(STM32PP_SRCPATH "${ENV_SCRIPTS_DIR}/stm32++/src")
+    set(STM32PP_SRCS
+        "${STM32PP_SRCPATH}/semihosting.cpp"
+        "${STM32PP_SRCPATH}/printSink.cpp"
+        "${STM32PP_SRCPATH}/tsnprintf.cpp"
+    )
+endif()
 
 function(stm32_create_utility_targets imgname)
     add_custom_target(flash bash -c "${ENV_SCRIPTS_DIR}/flash.sh ./${imgname}" DEPENDS "${imgname}")

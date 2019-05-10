@@ -26,7 +26,11 @@ do
         verify="1"
         ;;
     -h|--halt)
-        hlt=1
+        hlt="1"
+        ;;
+    -o|--offset)
+        shift
+        offset="$1"
         ;;
     --help)
         printUsage
@@ -67,6 +71,10 @@ fi
 fname=`readlink -f "$fname"`
 
 cmd="reset halt; flash write_image erase $fname"
+
+if [ ! -z "offset" ]; then
+    cmd="$cmd $offset"
+fi
 
 if [ "$verify" == "1" ]; then
     cmd="$cmd; verify_image $fname"

@@ -1,6 +1,6 @@
 #ifndef STM32PP_XASSERT_HPP
 #define STM32PP_XASSERT_HPP
-#include "snprint.hpp"
+#include "tprintf.hpp"
 
 #ifndef NDEBUG
     #undef xassert

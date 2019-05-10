@@ -7,6 +7,7 @@
 #define _TPRINTF_H
 
 #include "tsnprintf.hpp"
+#include "printSink.hpp"
 #include <assert.h>
 #include <stdlib.h>
 #include <alloca.h>
@@ -23,64 +24,6 @@
     #define STM32PP_TPRINTF_SYNC_EXPAND_STEP 128
 #endif
 
-struct IPrintSink
-{
-    struct BufferInfo
-    {
-        char* buf = nullptr;
-        size_t bufSize = 0;
-        void clear()
-        {
-            buf = nullptr;
-            bufSize = 0;
-        }
-    };
-    /**
-     * @brief waitReady Waits till the sink has completed the last print operation, if any
-     * @return Pointer to the sink's buffer info, if the sink is async.
-     * Null if the sink is synchronous
-     */
-    virtual BufferInfo* waitReady() const { return nullptr; }
-    virtual void print(const char* str, size_t len, int fd=1) = 0;
-};
-
-struct AsyncPrintSink: public IPrintSink
-{
-protected:
-    BufferInfo mPrintBuffer;
-};
-
-static inline IPrintSink* setPrintSink(IPrintSink* newSink)
-{
-    extern IPrintSink* gPrintSink;
-    IPrintSink::BufferInfo* currSinkBufInfo = gPrintSink->waitReady();
-    bool isAsync = (currSinkBufInfo != nullptr);
-    if (isAsync)
-    {
-        if (currSinkBufInfo->buf)
-        {
-            auto newSinkBufInfo = newSink->waitReady();
-            if (newSinkBufInfo) // newSink is async, move current async buffer to it
-            {
-                if (newSinkBufInfo->buf)
-                { // newSink also has a buffer allocated, free it
-                    free(newSinkBufInfo->buf);
-                }
-                *newSinkBufInfo = *currSinkBufInfo;
-                currSinkBufInfo->clear();
-            }
-            else // newSink is synchronous, and we have an async buffer, free it
-            {
-                free(currSinkBufInfo);
-                currSinkBufInfo->clear();
-            }
-        }
-    }
-    auto old = gPrintSink;
-    gPrintSink = newSink;
-    return old;
-}
-
 template <int InitialBufSize=64, typename... Args>
 size_t ftprintf(uint8_t fd, const char* fmtStr, Args... args)
 {
@@ -95,7 +38,7 @@ size_t ftprintf(uint8_t fd, const char* fmtStr, Args... args)
         staticBuf = nullptr;
         if (async->buf)
         {
-            buf = async->buf;
+            buf = (char*)async->buf;
             bufsize = async->bufSize;
         }
         else
@@ -138,11 +81,19 @@ size_t ftprintf(uint8_t fd, const char* fmtStr, Args... args)
             return 0;
         }
     }
+    assert(ret >= buf);
     size_t size = ret-buf;
-    gPrintSink->print(buf, size, fd);
-    if ((buf != staticBuf) && !async)
+    if (async)
     {
-        free(buf);
+        gPrintSink->print(buf, size, bufsize);
+    }
+    else
+    {
+        gPrintSink->print(buf, size, fd);
+        if (buf != staticBuf)
+        {
+            free(buf);
+        }
     }
     return size;
 }
@@ -156,7 +107,7 @@ uint16_t tprintf(const char* fmtStr, Args... args)
 static inline void puts(const char* str, uint16_t len)
 {
     extern IPrintSink* gPrintSink;
-    gPrintSink->print(str, len, 1);
+    gPrintSink->print((char*)str, len, 1);
 }
 
 #endif

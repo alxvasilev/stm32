@@ -10,9 +10,17 @@
 #include <libopencm3/stm32/usart.h>
 #include <libopencm3/stm32/dma.h>
 #include <libopencm3/cm3/nvic.h>
-#include "snprint.hpp"
+#include "tprintf.hpp"
 #include "dma.hpp"
 #include <assert.h>
+#ifdef STM32PP_USART_DEBUG
+#define STM32PP_USART_LOG(fmtString,...) tprintf("%: " fmtString "\n", Self::periphName(), ##__VA_ARGS__)
+#else
+#define STM32PP_USART_LOG(fmtString,...)
+#endif
+
+#define STM32PP_LOG_DEBUG(fmtString,...) STM32PP_USART_LOG(fmtString, ##__VA_ARGS__)
+
 template<>
 struct PeriphInfo<USART1>
 {
@@ -88,8 +96,15 @@ protected:
     {
         gpio_set_mode(this->kPort, GPIO_MODE_OUTPUT_50_MHZ,
             GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, this->kPinTx);
+        STM32PP_USART_LOG("Enabled TX pin");
     }
-    static void staticSendBlocking(const char* buf, size_t size)
+public:
+    void enableTxInterrupt()
+    {
+        USART_CR1(kPeriphId) |= USART_CR1_TXEIE;
+        STM32PP_USART_LOG("Enabled TX interrupt");
+    }
+    void sendBlocking(const char* buf, size_t size)
     {
         const char* bufend = buf+size;
         for(; buf < bufend; buf++)
@@ -97,45 +112,29 @@ protected:
             usart_send_blocking(Self::kPeriphId, *buf);
         }
     }
-public:
-    void enableTxInterrupt()
-    {
-        USART_CR1(kPeriphId) |= USART_CR1_TXEIE;
-    }
-    static void blockingPrintSink(const char* str, size_t len, int fd, void* userp)
-    {
-        staticSendBlocking(str, len);
-    }
-    void setBlockingPrintSink()
-    {
-        ::setPrintSink(blockingPrintSink);
-    }
-    void sendBlocking(const char* buf, size_t size)
-    {
-        staticSendBlocking(buf, size);
-    }
     void sendBlocking(const char* str)
     {
         while(*str)
         {
-            usart_send_blocking(this->kPeriphId, *str);
+            usart_send_blocking(Self::kPeriphId, *str);
             str++;
         }
     }
 protected:
     void dmaStartPeripheralTx()
     {
-        usart_enable_tx_dma(Self::periphId);
+        usart_enable_tx_dma(Self::kPeriphId);
     }
     void dmaStopPeripheralTx()
     {
-        usart_disable_tx_dma(Self::periphId);
+        usart_disable_tx_dma(Self::kPeriphId);
     }
     // Rx part
     void enableRx()
     {
         gpio_set_mode(this->kPort, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT,
             this->kPinRx);
+        STM32PP_USART_LOG("Enabled TX pin");
     }
     void dmaStartPeripheralRx()
     {
@@ -149,6 +148,7 @@ public:
     static void enableRxInterrupt()
     {
         USART_CR1(kPeriphId) |= USART_CR1_RXNEIE;
+        STM32PP_USART_LOG("Enabled RX interrupt");
     }
     void recvBlocking(char* buf, size_t bufsize)
     {
@@ -181,16 +181,17 @@ public:
         rcc_periph_clock_enable(PeriphInfo<this->kPort>::kClockId);
         rcc_periph_clock_enable(this->kClockId);
         usart_disable(USART);
+        STM32PP_USART_LOG("Enabled clocks for port and USART peripheral");
 
         bool rx = (flags & kOptEnableRx);
         if (rx)
         {
-            this->enableTx();
+            this->enableRx();
         }
         bool tx = (flags & kOptEnableTx);
         if (tx)
         {
-            this->enableRx();
+            this->enableTx();
         }
 
         /* Setup UART parameters. */
@@ -208,6 +209,8 @@ public:
 
         /* Finally enable the USART. */
         usart_enable(kPeriphId);
+        STM32PP_USART_LOG("Enabled with baudrate: %, databits: 8, stop bits: %, parity: %, no flow control",
+            baudRate, stopBits, parity);
     }
     void powerOff()
     {
@@ -220,6 +223,16 @@ public:
     {
         usart_enable(kPeriphId);
         rcc_periph_clock_enable(this->kClockId);
+    }
+};
+
+template <class UsartDevice>
+class PrintSink: public UsartDevice, public IPrintSink
+{
+    virtual IPrintSink::BufferInfo* waitReady() { return nullptr; }
+    virtual void print(const char *str, size_t len, int info)
+    {
+        UsartDevice::sendBlocking(str, len);
     }
 };
 }

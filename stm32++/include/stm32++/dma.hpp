@@ -9,16 +9,17 @@
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/stm32/dma.h>
 #include "xassert.hpp"
-#include "snprint.hpp"
 #include "common.hpp"
 
 //#define DMA_ENABLE_DEBUG
 
-#ifdef DMA_ENABLE_DEBUG
+#if defined(DMA_ENABLE_DEBUG) || !defined(NDEBUG)
+    #include "tprintf.hpp"
     #define DMA_LOG_DEBUG(fmt,...) tprintf("%(%): " fmt "\n", Base::periphName(), DmaInfo::periphName(), ##__VA_ARGS__)
 #else
    #define DMA_LOG_DEBUG(fmt,...)
 #endif
+
 TYPE_SUPPORTS(HasTxDma, &std::remove_reference<T>::type::dmaTxStop);
 TYPE_SUPPORTS(HasRxDma, &std::remove_reference<T>::type::dmaRxStop);
 
@@ -83,8 +84,6 @@ private:
     typedef PeriphInfo<Base::kDmaTxId> DmaInfo;
     typedef void(*FreeFunc)(void*);
     volatile bool mTxBusy = false;
-    volatile const void* mTxBuf = nullptr;
-    volatile FreeFunc mFreeFunc = nullptr;
 protected:
     enum: uint8_t { kDmaTxIrq = Self::dmaIrqForChannel(Base::kDmaTxChannel) };
 public:
@@ -129,7 +128,7 @@ public:
      * in case \c freeFunc was provided for the previous transfer).
      */
     template <typename... Args>
-    void dmaTxStart(const void* data, uint16_t size, FreeFunc freeFunc, Args... args)
+    void dmaTxStart(const void* data, uint16_t size, Args... args)
     {
         enum: uint8_t { chan = Self::kDmaTxChannel };
         enum: uint32_t { dma = Self::kDmaTxId };
@@ -137,8 +136,6 @@ public:
 
         while(mTxBusy);
         mTxBusy = true;
-        mTxBuf = data;
-        mFreeFunc = freeFunc;
 
         dma_set_memory_address(dma, chan, (uint32_t)data);
         dma_set_number_of_data(dma, chan, size / Base::kDmaWordSize);
@@ -169,23 +166,7 @@ public:
         dma_disable_transfer_complete_interrupt(Base::kDmaTxId, Base::kDmaTxChannel);
         Base::dmaStopPeripheralTx();
         dma_disable_channel(Base::kDmaTxId, Base::kDmaTxChannel);
-        xassert(mTxBuf);
-        //FIXME: mFreeFunc may not be reentrant
-        if (mFreeFunc)
-        {
-            mFreeFunc((void*)mTxBuf);
-        }
-        mTxBuf = nullptr;
         mTxBusy = false;
-    }
-    static void dmaPrintSink(const char* str, size_t len, int fd, void* userp)
-    {
-        auto& self = *static_cast<Self*>(userp);
-        self.dmaTxStart((const void*)str, len, tprintf_free);
-    }
-    void setDmaPrintSink()
-    {
-        ::setPrintSink(dmaPrintSink, this, kPrintSinkLeaveBuffer);
     }
 };
 /** Mixin to support Rx DMA. Base is derived from DmaInfo<Periph>,
