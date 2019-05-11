@@ -61,10 +61,22 @@ you can just use tprint()")
 set(optStdioLibcInRelease 0 CACHE BOOL
 "In RELEASE mode, use the stdio-enabled standard C library")
 
+set(optCustomOffset 0 CACHE STRING "Custom offset of the .text section")
+
 add_definitions(-DCHIP_TYPE=STM32 -D${optChipFamily})
 include_directories("${CMAKE_CURRENT_LIST_DIR}/stm32++/include")
-set(CMAKE_EXE_LINKER_FLAGS "-nostartfiles -T${optLinkScript} ${linkDirs}" CACHE STRING "")
+if (optCustomOffset)
+    set(linkerOffsetArg "-Ttext=${optCustomOffset}")
+    set(writeOffsetArg "-o ${optCustomOffset}")
+endif()
 
+set(exeLinkerFlags "-nostartfiles -T${optLinkScript} ${linkerOffsetArg} ${linkDirs}")
+
+if (NOT "${exeLinkerFlags}" STREQUAL "${CMAKE_EXE_LINKER_FLAGS}")
+    message(STATUS "EXE linker flags changed")
+    UNSET(CMAKE_EXE_LINKER_FLAGS CACHE)
+    set(CMAKE_EXE_LINKER_FLAGS "${exeLinkerFlags}" CACHE STRING "")
+endif()
 
 if (optStdioLibcInDebug)
     set(CMAKE_EXE_LINKER_FLAGS_DEBUG "--specs=rdimon.specs -lc" CACHE STRING "" FORCE)
@@ -98,7 +110,14 @@ if (optUseOpencm3)
 endif()
 
 function(stm32_create_utility_targets imgname)
-    add_custom_target(flash bash -c "${ENV_SCRIPTS_DIR}/flash.sh ./${imgname}" DEPENDS "${imgname}")
+    string(REGEX REPLACE "\\.[^.]*$" "" imgnameNoExt "${imgname}")
+    add_custom_target(${imgnameNoExt}.bin bash -c "arm-none-eabi-objcopy -O binary ./${imgname} ./${imgnameNoExt}.bin" DEPENDS "${imgname}")
+    set_target_properties(${imgname} PROPERTIES LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/stm32.ld")
+    if (optCustomOffset)
+        add_custom_target(flash bash -c "${ENV_SCRIPTS_DIR}/flash.sh -o ${optCustomOffset} ./${imgnameNoExt}.bin" DEPENDS "${imgnameNoExt}.bin")
+    else()
+        add_custom_target(flash bash -c "${ENV_SCRIPTS_DIR}/flash.sh ./${imgname}" DEPENDS "${imgname}")
+    endif()
     add_custom_target(gdb
         arm-none-eabi-gdb -ex 'file ${CMAKE_CURRENT_BINARY_DIR}/${imgname}'
         -ex 'directory ${CMAKE_CURRENT_SOURCE_DIR}'
