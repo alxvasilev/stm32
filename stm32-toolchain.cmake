@@ -35,7 +35,7 @@ if (optUseOpencm3)
     set(modeldir "${ldscriptBaseDir}/${stm32model}")
     file(GLOB ldscripts "${modeldir}/stm32*.ld")
     set(optLinkScript "${ldscriptBaseDir}/f1/stm32f103xb.ld" CACHE STRING "Linker script")
-    set_property(CACHE optLinkScript PROPERTY STRINGS ${ldscripts})
+    set_property(CACHE optLinkScript PROPERTY STRINGS ${ldscripts} "${CMAKE_CURRENT_SOURCE_DIR}/stm32.ld")
     set(linkDirs "-L${CMAKE_CURRENT_LIST_DIR}/libopencm3/lib")
     link_libraries("opencm3_stm32${stm32model}")
 # We cannot use link_directories because of a CMake quirk - it does not

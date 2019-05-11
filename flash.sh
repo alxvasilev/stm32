@@ -5,9 +5,11 @@
 function printUsage
 {
     echo -e "\nOpenOCD flash image command. Usage:\n\
-    flash.sh [-v|--verify] [-h|--halt] <image[.elf]>\n\
+    flash.sh [-v|--verify] [-h|--halt] [-o|--offset] <image[.elf]>\n\
     -v --verify - Verify written image\n\
     -h --halt - Do not reset after flashing the image\n\
+    -o --offset <offset> - Address at which to start writing\n\
+      the image, i.e. 0x08000000\n\
     --help Print this help\n"
 }
 
