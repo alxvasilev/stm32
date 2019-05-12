@@ -67,7 +67,6 @@ add_definitions(-DCHIP_TYPE=STM32 -D${optChipFamily})
 include_directories("${CMAKE_CURRENT_LIST_DIR}/stm32++/include")
 if (optCustomOffset)
     set(linkerOffsetArg "-Ttext=${optCustomOffset}")
-    set(writeOffsetArg "-o ${optCustomOffset}")
 endif()
 
 set(exeLinkerFlags "-nostartfiles -T${optLinkScript} ${linkerOffsetArg} ${linkDirs}")
@@ -110,14 +109,23 @@ if (optUseOpencm3)
 endif()
 
 function(stm32_create_utility_targets imgname)
+    set_target_properties(${imgname} PROPERTIES LINK_DEPENDS "${optLinkScript}")
+
     string(REGEX REPLACE "\\.[^.]*$" "" imgnameNoExt "${imgname}")
-    add_custom_target(${imgnameNoExt}.bin bash -c "arm-none-eabi-objcopy -O binary ./${imgname} ./${imgnameNoExt}.bin" DEPENDS "${imgname}")
-    set_target_properties(${imgname} PROPERTIES LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/stm32.ld")
     if (optCustomOffset)
-        add_custom_target(flash bash -c "${ENV_SCRIPTS_DIR}/flash.sh -o ${optCustomOffset} ./${imgnameNoExt}.bin" DEPENDS "${imgnameNoExt}.bin")
+        set(binName "${imgnameNoExt}_${optCustomOffset}.bin")
+    else()
+        set(binName "${imgnameNoExt}.bin")
+    endif()
+    add_custom_target(bin bash -c "arm-none-eabi-objcopy -O binary ./${imgname} ./${binName}" DEPENDS "${imgname}")
+    if (optCustomOffset)
+        add_custom_target(flash bash -c "${ENV_SCRIPTS_DIR}/flash.sh -o ${optCustomOffset} ./${binName}" DEPENDS bin)
     else()
         add_custom_target(flash bash -c "${ENV_SCRIPTS_DIR}/flash.sh ./${imgname}" DEPENDS "${imgname}")
     endif()
+# remove all derived firmware files before rebuilding (or before linking if PRE_BUILD is not supported)
+    add_custom_command(TARGET ${imgname} PRE_BUILD COMMAND rm -vf "./${imgnameNoExt}.bin" "./${imgnameNoExt}_0x????????.bin")
+# debugger support
     add_custom_target(gdb
         arm-none-eabi-gdb -ex 'file ${CMAKE_CURRENT_BINARY_DIR}/${imgname}'
         -ex 'directory ${CMAKE_CURRENT_SOURCE_DIR}'
