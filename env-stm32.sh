@@ -41,6 +41,17 @@ function flash
 }
 export -f flash
 
+function hc05
+{
+    if [ -z "$1" ]; then
+        ttyDev=/dev/ttyUSB0
+    else
+        ttyDev="$1"
+    fi
+    socat "$ttyDev",b38400,raw,echo=0,crnl -
+}
+export -f hc05
+
 if [ "$USER" == "root" ]; then
     prompt="#"
 else

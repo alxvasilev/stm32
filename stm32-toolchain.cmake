@@ -60,6 +60,8 @@ This has a somewhat large footprint - if you just need printing via semihosting,
 you can just use tprint()")
 set(optStdioLibcInRelease 0 CACHE BOOL
 "In RELEASE mode, use the stdio-enabled standard C library")
+set(optStdioLibcInMinSizeRel 0 CACHE BOOL
+"In MinSizeRelease mode, use the stdio-enabled standard C library")
 
 set(optCustomOffset 0 CACHE STRING "Custom offset of the .text section")
 
@@ -87,6 +89,12 @@ if (optStdioLibcInRelease)
     set(CMAKE_EXE_LINKER_FLAGS_RELEASE "--specs=rdimon.specs -lc"  CACHE STRING "" FORCE)
 else()
     set(CMAKE_EXE_LINKER_FLAGS_RELEASE "--specs=nosys.specs"  CACHE STRING "" FORCE)
+endif()
+
+if (optStdioLibcInMinSizeRel)
+    set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "--specs=rdimon.specs -lc"  CACHE STRING "" FORCE)
+else()
+    set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "--specs=nosys.specs"  CACHE STRING "" FORCE)
 endif()
 
 set(CMAKE_FIND_ROOT_PATH "${CMAKE_SYSROOT}")
