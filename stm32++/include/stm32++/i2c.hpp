@@ -32,9 +32,9 @@ class I2c: public PeriphInfo<I2C>
 public:
     void init(bool fastMode=true, uint8_t ownAddr=0x15)
     {
-        rcc_periph_clock_enable(RCC_GPIOB);
+        rcc_periph_clock_enable(PeriphInfo<this->kPortId>::kClockId);
         /* Set alternate functions for the SCL and SDA pins of I2C1. */
-        gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,
+        gpio_set_mode(this->kPortId, GPIO_MODE_OUTPUT_50_MHZ,
                       GPIO_CNF_OUTPUT_ALTFN_OPENDRAIN,
                       this->kPinSda | this->kPinScl);
 
@@ -333,9 +333,8 @@ void dmaStopPeripheralRx()
 }
 };
 }
-template<>
-struct PeriphInfo<I2C1>
-{
+STM32PP_PERIPH_INFO(I2C1)
+    enum: uint32_t { kPortId = GPIOB };
     enum: uint16_t { kPinScl = GPIO_I2C1_SCL, kPinSda = GPIO_I2C1_SDA };
     static constexpr rcc_periph_clken kClockId = RCC_I2C1;
     enum: uint32_t { kDmaTxId = DMA1, kDmaRxId = DMA1 };
@@ -346,13 +345,10 @@ struct PeriphInfo<I2C1>
     };
     static const uint32_t dmaRxDataRegister() { return (uint32_t)(&I2C1_DR); }
     static const uint32_t dmaTxDataRegister() { return (uint32_t)(&I2C1_DR); }
-#ifndef NDEBUG
-    static constexpr const char* periphName() { return "i2c1"; }
-#endif
 };
-template<>
-struct PeriphInfo<I2C2>
-{
+
+STM32PP_PERIPH_INFO(I2C2)
+    enum: uint32_t { kPortId = GPIOB };
     enum: uint16_t { kPinScl = GPIO_I2C2_SCL, kPinSda = GPIO_I2C2_SDA };
     static constexpr rcc_periph_clken kClockId = RCC_I2C2;
     enum: uint32_t { kDmaTxId = DMA1, kDmaRxId = DMA1 };
@@ -363,7 +359,4 @@ struct PeriphInfo<I2C2>
     };
     static const uint32_t dmaTxDataRegister() { return (uint32_t)(&I2C2_DR); }
     static const uint32_t dmaRxDataRegister() { return (uint32_t)(&I2C2_DR); }
-#ifndef NDEBUG
-    static constexpr const char* periphName() { return "i2c1"; }
-#endif
 };

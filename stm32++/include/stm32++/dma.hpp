@@ -77,7 +77,7 @@ bool dmaChannelIsBusy(uint32_t dma, uint8_t chan)
  *  for which DMA is to be supported. No method should conflict with one in dma::Rx
  */
 template <class Base, uint8_t Opts=kDefaultOpts>
-class Tx: public Base, private PeriphInfo<Base::kDmaTxId>
+class Tx: public Base
 {
 private:
     typedef Tx<Base, Opts> Self;
@@ -85,7 +85,7 @@ private:
     typedef void(*FreeFunc)(void*);
     volatile bool mTxBusy = false;
 protected:
-    enum: uint8_t { kDmaTxIrq = Self::dmaIrqForChannel(Base::kDmaTxChannel) };
+    enum: uint8_t { kDmaTxIrq = DmaInfo::dmaIrqForChannel(Base::kDmaTxChannel) };
 public:
     template <typename... Args>
     void init(Args... args)
@@ -99,7 +99,7 @@ public:
 
         if (!HasRxDma<Base>::value)
         {
-            rcc_periph_clock_enable(Self::kDmaClockId);
+            rcc_periph_clock_enable(DmaInfo::kClockId);
             DMA_LOG_DEBUG("Tx: Enabled clock");
         }
 
@@ -173,14 +173,14 @@ public:
  * where Periph is the actual peripheral for which DMA is to be supported
  */
 template <class Base, uint8_t Opts=kDefaultOpts>
-class Rx: public Base, private PeriphInfo<Base::kDmaRxId>
+class Rx: public Base
 {
 private:
     volatile bool mRxBusy = false;
     typedef Rx<Base, Opts> Self;
     typedef PeriphInfo<Base::kDmaRxId> DmaInfo;
 public:
-    enum: uint8_t { kDmaRxIrq = Self::dmaIrqForChannel(Self::kDmaRxChannel) };
+    enum: uint8_t { kDmaRxIrq = DmaInfo::dmaIrqForChannel(Self::kDmaRxChannel) };
     volatile bool dmaRxBusy() const { return mRxBusy; }
     template<typename... Args>
     void init(Args... args)
@@ -194,7 +194,7 @@ public:
 
         if (!HasTxDma<Base>::value)
         {
-            rcc_periph_clock_enable(Self::kDmaClockId);
+            rcc_periph_clock_enable(DmaInfo::kDmaClockId);
             DMA_LOG_DEBUG("Rx: Enabled clock");
         }
 
@@ -258,11 +258,8 @@ public:
 }
 
 /** Peripheral definitions */
-template<>
-struct PeriphInfo<DMA1>
-{
-    enum: uint32_t { kDmaId = DMA1 };
-    static constexpr rcc_periph_clken kDmaClockId = RCC_DMA1;
+STM32PP_PERIPH_INFO(DMA1)
+    static constexpr rcc_periph_clken kClockId = RCC_DMA1;
     static constexpr uint8_t dmaIrqForChannel(const uint8_t chan)
     {
         switch (chan)
@@ -277,16 +274,10 @@ struct PeriphInfo<DMA1>
             default: __builtin_trap();
         }
     }
-#ifndef NDEBUG
-    static constexpr const char* periphName() { return "DMA1"; }
-#endif
 };
 
-template<>
-struct PeriphInfo<DMA2>
-{
-    enum: uint32_t { kDmaId = DMA2 };
-    static constexpr rcc_periph_clken kDmaClockId = RCC_DMA2;
+STM32PP_PERIPH_INFO(DMA2)
+    static constexpr rcc_periph_clken kClockId = RCC_DMA2;
     static constexpr uint8_t dmaIrqForChannel(const uint8_t chan)
     {
         switch (chan)
@@ -299,9 +290,6 @@ struct PeriphInfo<DMA2>
             default: __builtin_trap();
         }
     }
-#ifndef NDEBUG
-    static constexpr const char* periphName() { return "DMA2"; }
-#endif
 };
 
 #endif // DMA_HPP

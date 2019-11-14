@@ -402,36 +402,21 @@ class Adc: public dma::Rx<AdcNoDma<ADC>, dma::kAllMaxPrio>
 };
 }
 
-template<>
-struct PeriphInfo<ADC1>
-{
+STM32PP_PERIPH_INFO(ADC1)
     static constexpr rcc_periph_clken kClockId = RCC_ADC1;
     enum: uint32_t { kDmaRxId = DMA1 };
     static const uint32_t dmaRxDataRegister() { return (uint32_t)(&ADC1_DR); }
     enum: uint8_t { kDmaRxChannel = DMA_CHANNEL1, kDmaWordSize = 2 };
     static constexpr rcc_periph_rst kResetBit = RST_ADC1;
-#ifndef NDEBUG
-    static constexpr const char* periphName() { return "adc1"; }
-#endif
 };
 
-template<>
-struct PeriphInfo<ADC2>
-{
+STM32PP_PERIPH_INFO(ADC2)
     static constexpr rcc_periph_clken kClockId = RCC_ADC2;
     static constexpr rcc_periph_rst kResetBit = RST_ADC2;
     // ADC2 has no own DMA support.
-#ifndef NDEBUG
-    static constexpr const char* periphName() { return "adc2"; }
-#endif
 };
 
-template<>
-struct PeriphInfo<ADC3>
-{
-#ifndef NDEBUG
-    static constexpr const char* periphName() { return "adc3"; }
-#endif
+STM32PP_PERIPH_INFO(ADC3)
     static constexpr rcc_periph_clken kClockId = RCC_ADC3;
     enum: uint32_t { kDmaRxId = DMA2 };
     static const uint32_t dmaRxDataRegister() { return (uint32_t)(&ADC3_DR); }
