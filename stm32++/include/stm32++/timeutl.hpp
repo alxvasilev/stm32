@@ -119,11 +119,11 @@ static inline void msDelay(uint32_t ms) { DwtCounter::delay<1, TickCorr>(ms); }
 
 /* 64-bit timestamp clock. Uses T as the actual time source, and implements
  * wrapping protection
- * @param Int - whether to implement concurrency guard if used in interrupts.
+ * @param Intr - whether to implement concurrency guard if used in interrupts.
  * Necessary because we have internal state that may be updated in the get()
  * method
 */
-template <bool Int, class T>
+template <bool Intr, class T>
 class TimeClockNoWrap;
 
 template <class T>
@@ -181,10 +181,30 @@ public:
     volatile void reset() { mStart = T::ticks(); }
     int64_t tsStart() const { return mStart; }
     volatile int64_t ticksElapsed()
-    { //compensate for our own one cycle overhead
-        return T::ticks() - mStart - 18;
+    {
+        auto result = T::ticks() - mStart - 17; // still do minimal compensation
+        return (result < 0) ? 0 : result;
     }
-    volatile int64_t nsElapsed() { return T::ticksToNs(ticksElapsed()); }
+    volatile int64_t ticksElapsedCompensated()
+    {
+        auto t = T::ticks();
+        // WARNING: The compensation is tuned for optimized code, i.e. will be very
+        // inaccurate in debug builds
+        int overheadClocks;
+        // Tuned for STM32F103
+        if (rcc_ahb_frequency >= 72000000) {
+            overheadClocks = 27; // tuned for 72 MHz (hse)
+        } else if (rcc_ahb_frequency <= 24000000) {
+            overheadClocks = 17; // tuned for 24 MHz (hse)
+        } else {
+            overheadClocks = 21; // tuned for 48 MHz (hsi)
+        }
+        //compensate for our own overhead
+        auto result = t - mStart - overheadClocks;
+        return (result < 0) ? 0 : result;
+    }
+    template <bool Comp=true>
+    volatile int64_t nsElapsed() { return T::ticksToNs(Comp ? ticksElapsedCompensated() : ticksElapsed()); }
     volatile int64_t usElapsed() { return T::ticksToUs(ticksElapsed()); }
     volatile int64_t msElapsed() { return T::ticksToMs(ticksElapsed()); }
 };
