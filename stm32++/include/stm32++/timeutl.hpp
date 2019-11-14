@@ -37,23 +37,23 @@ public:
     { return ticks / (rcc_ahb_frequency/100); }
 
     template <uint32_t Div, int32_t Corr>
-    static volatile void delay(uint32_t t)
+    static volatile void delay(uint32_t t) // not accurate below ~400ns
     {
 #ifndef NDEBUG
         enum { kCycleOverhead = 160 + Corr}; //in debug build, the func call overhead is quite high
 #else
-        enum { kCycleOverhead = 16 + Corr};
+        enum { kCycleOverhead = 32 + Corr};
 #endif
         uint32_t now = get();
         uint32_t ticks = t * (rcc_ahb_frequency/1000) / Div;
         if (ticks > kCycleOverhead)
             ticks -= kCycleOverhead;
         else
-            ticks = 0;
+            return;
         register uint32_t tsEnd = now + ticks;
-        if (now > tsEnd) //will wrap
+        if (tsEnd < now) //will wrap
         {
-            while(get() > tsEnd);
+            while(tsEnd < get()); // wait for get() to also wrap
         }
         while(get() < tsEnd);
     }
@@ -80,22 +80,22 @@ typename std::enable_if<(Count > 1), void>::type nop()
     asm volatile("nop;");
     nop<Count-1>();
 }
-/*
+
 template <uint32_t Ns, uint32_t Freq>
-typename std::enable_if<(Ns <= 100), void>::type nsDelay()
+typename std::enable_if<(Ns <= 100), void>::type nsDelayPrecise()
 {
     nop<(Ns * (Freq / 1000)) / 1000000>();
 }
-*/
+
 template <uint32_t Ns, uint32_t Freq>
-void nsDelay()
+typename std::enable_if<(Ns > 100), void>::type nsDelayPrecise()
 {
 
 //Loop takes 5 cycles if clock is 72 MHz, and 3 cycles if clock is 24 MHz
     enum: uint32_t
     {
         kOverhead = 2,
-        kTicks = (Ns * (Freq / 1000)) / 1000000,
+        kTicks = ((Ns * (Freq / 1000)) + 500000) / 1000000,
         kTicksPerLoop = (Freq > 24000000) ? 6 : 3
     };
 
