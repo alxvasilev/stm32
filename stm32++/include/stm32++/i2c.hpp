@@ -2,6 +2,8 @@
  * @author Alexander Vassilev
  * @copyright BSD License
  */
+#ifndef STM32PP_I2C_H
+#define STM32PP_I2C_H
 
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
@@ -341,8 +343,8 @@ STM32PP_PERIPH_INFO(I2C1)
     enum: uint8_t {
         kDmaTxChannel = DMA_CHANNEL6,
         kDmaRxChannel = DMA_CHANNEL7,
-        kDmaWordSize = 1
     };
+    static const uint8_t dmaWordSize() { return 1; }
     static const uint32_t dmaRxDataRegister() { return (uint32_t)(&I2C1_DR); }
     static const uint32_t dmaTxDataRegister() { return (uint32_t)(&I2C1_DR); }
 };
@@ -355,8 +357,10 @@ STM32PP_PERIPH_INFO(I2C2)
     enum: uint8_t {
         kDmaTxChannel = DMA_CHANNEL4,
         kDmaRxChannel = DMA_CHANNEL5,
-        kDmaWordSize = 1
     };
+    static const uint8_t dmaWordSize() { return 1; }
     static const uint32_t dmaTxDataRegister() { return (uint32_t)(&I2C2_DR); }
     static const uint32_t dmaRxDataRegister() { return (uint32_t)(&I2C2_DR); }
 };
+
+#endif

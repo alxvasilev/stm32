@@ -3,6 +3,9 @@
  * @copyright BSD License
  */
 
+#ifndef STM32PP_SPI_H
+#define STM32PP_SPI_H
+
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/usart.h>
@@ -59,11 +62,15 @@ public:
         if ((config & kDisableOutput) == 0) {
             outputPins |= this->kPinMosi;
         }
-        if (config & kHardwareNSS) {
-            outputPins |= this->kPinNss;
-        }
         gpio_set_mode(this->kPortId, GPIO_MODE_OUTPUT_50_MHZ,
             GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, outputPins);
+
+        if (config & kHardwareNSS) {
+            gpio_set_mode(this->kPortId, GPIO_MODE_OUTPUT_50_MHZ,
+                GPIO_CNF_OUTPUT_ALTFN_OPENDRAIN, this->kPinNss);
+            spi_enable_ss_output(SPI);
+        }
+
         if ((config & kDisableInput) == 0) {
             gpio_set_mode(this->kPortId, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT,
                 this->kPinMiso);
@@ -77,11 +84,6 @@ public:
             (config & k16BitFrame) ? SPI_CR1_DFF_16BIT : SPI_CR1_DFF_8BIT,
             (config & kLsbFirst) ? SPI_CR1_LSBFIRST : SPI_CR1_MSBFIRST);
 
-        if ((config & kHardwareNSS) == 0)
-        {
-            spi_enable_software_slave_management(SPI);
-        }
-        spi_set_nss_high(SPI);
         spi_enable(SPI);
     }
     void send(uint16_t data)
@@ -91,6 +93,26 @@ public:
     uint16_t recv()
     {
         return spi_read(SPI);
+    }
+    bool isBusy() const { return (SPI_SR(SPI) & SPI_SR_BSY) != 0; }
+    void waitComplete() const { while (SPI_SR(SPI) & SPI_SR_BSY); }
+    uint8_t dmaWordSize() const
+    {
+        return ((SPI_CR1(SPI) & SPI_CR1_DFF) == SPI_CR1_DFF_16BIT) ? 2 : 1;
+    }
+    void dmaStartPeripheralTx() { spi_enable_tx_dma(SPI); }
+    void dmaStartPeripheralRx() { spi_enable_rx_dma(SPI); }
+    //WARNING: The dmaStopPerpheralXX can be called from an ISR
+    void dmaStopPeripheralTx()
+    {
+        waitComplete();
+        spi_disable_tx_dma(SPI);
+        this->stop();
+    }
+    void dmaStopPeripheralRx()
+    {
+        waitComplete();
+        spi_disable_rx_dma(SPI);
     }
 };
 
@@ -138,16 +160,14 @@ STM32PP_PERIPH_INFO(SPI1)
                      kPinMosi = GPIO_SPI1_MOSI, kPinMiso = GPIO_SPI1_MISO };
     static constexpr rcc_periph_clken kClockId = RCC_SPI1;
     static uint32_t apbFreq() { return rcc_apb2_frequency; }
-/*
+// DMA info
     enum: uint32_t { kDmaTxId = DMA1, kDmaRxId = DMA1 };
     enum: uint8_t {
-        kDmaTxChannel = DMA_CHANNEL6,
-        kDmaRxChannel = DMA_CHANNEL7,
-        kDmaWordSize = 1
+        kDmaTxChannel = DMA_CHANNEL3,
+        kDmaRxChannel = DMA_CHANNEL2
     };
-    static const uint32_t dmaRxDataRegister() { return (uint32_t)(&I2C1_DR); }
-    static const uint32_t dmaTxDataRegister() { return (uint32_t)(&I2C1_DR); }
-*/
+    static const uint32_t dmaRxDataRegister() { return (uint32_t)(&SPI1_DR); }
+    static const uint32_t dmaTxDataRegister() { return (uint32_t)(&SPI1_DR); }
 };
 
 STM32PP_PERIPH_INFO(SPI2)
@@ -156,14 +176,14 @@ STM32PP_PERIPH_INFO(SPI2)
                      kPinMosi = GPIO_SPI2_MOSI, kPinMiso = GPIO_SPI2_MISO };
     static constexpr rcc_periph_clken kClockId = RCC_SPI2;
     static uint32_t apbFreq() { return rcc_apb1_frequency; }
-/*
+
     enum: uint32_t { kDmaTxId = DMA1, kDmaRxId = DMA1 };
     enum: uint8_t {
-        kDmaTxChannel = DMA_CHANNEL6,
-        kDmaRxChannel = DMA_CHANNEL7,
-        kDmaWordSize = 1
+        kDmaTxChannel = DMA_CHANNEL5,
+        kDmaRxChannel = DMA_CHANNEL4
     };
-    static const uint32_t dmaRxDataRegister() { return (uint32_t)(&I2C1_DR); }
-    static const uint32_t dmaTxDataRegister() { return (uint32_t)(&I2C1_DR); }
-*/
+    static const uint32_t dmaRxDataRegister() { return (uint32_t)(&SPI2_DR); }
+    static const uint32_t dmaTxDataRegister() { return (uint32_t)(&SPI2_DR); }
 };
+
+#endif

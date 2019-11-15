@@ -105,7 +105,7 @@ public:
 
         dma_channel_reset(dma, chan);
         dma_set_peripheral_address(dma, chan, Base::dmaTxDataRegister());
-        dma_set_peripheral_size(dma, chan, periphSizeCode(Self::kDmaWordSize));
+        dma_set_peripheral_size(dma, chan, periphSizeCode(this->dmaWordSize()));
         dma_disable_peripheral_increment_mode(dma, chan);
 
         dma_set_read_from_memory(dma, chan);
@@ -132,14 +132,14 @@ public:
     {
         enum: uint8_t { chan = Self::kDmaTxChannel };
         enum: uint32_t { dma = Self::kDmaTxId };
-        xassert(size % Base::kDmaWordSize == 0);
+        xassert(size % this->dmaWordSize() == 0);
 
         while(mTxBusy);
         mTxBusy = true;
 
         dma_set_memory_address(dma, chan, (uint32_t)data);
-        dma_set_number_of_data(dma, chan, size / Base::kDmaWordSize);
-        dma_set_memory_size(dma, chan, memSizeCode(Self::kDmaWordSize));
+        dma_set_number_of_data(dma, chan, size / this->dmaWordSize());
+        dma_set_memory_size(dma, chan, memSizeCode(this->dmaWordSize()));
         if ((Opts & kDmaNoDoneIntr) == 0)
         {
             dma_enable_transfer_complete_interrupt(dma, chan);
@@ -157,7 +157,10 @@ public:
         if ((DMA_ISR(Base::kDmaTxId) & DMA_ISR_TCIF(Base::kDmaTxChannel)) == 0)
             return;
 
-        // clear flag
+        // TODO: Maybe move clearing the TCIF flag just before starting a new transfer
+        // and use it for txBusy() status
+
+        // Clear transfer-complete interrupt flag
         DMA_IFCR(Base::kDmaTxId) |= DMA_IFCR_CTCIF(Base::kDmaTxChannel);
         dmaTxStop();
     }
@@ -201,7 +204,7 @@ public:
         dma_disable_channel(dma, chan);
         dma_channel_reset(dma, chan);
         dma_set_peripheral_address(dma, chan, (uint32_t)Base::dmaRxDataRegister());
-        dma_set_peripheral_size(dma, chan, periphSizeCode(Base::kDmaWordSize));
+        dma_set_peripheral_size(dma, chan, periphSizeCode(this->dmaWordSize()));
         dma_disable_peripheral_increment_mode(dma, chan);
 
         dma_enable_memory_increment_mode(dma, chan);
@@ -220,15 +223,15 @@ public:
     template <typename... Args>
     void dmaRxStart(const void* data, uint16_t size, Args... args)
     {
-        xassert(size % Base::kDmaWordSize == 0);
+        xassert(size % this->dmaWordSize() == 0);
         enum: uint32_t { dma = Base::kDmaRxId };
         enum: uint8_t { chan = Base::kDmaRxChannel };
         while(mRxBusy);
         mRxBusy = true;
 
         dma_set_memory_address(dma, chan, (uint32_t)data);
-        dma_set_memory_size(dma, chan, memSizeCode(Base::kDmaWordSize));
-        dma_set_number_of_data(dma, chan, size / Base::kDmaWordSize);
+        dma_set_memory_size(dma, chan, memSizeCode(this->dmaWordSize()));
+        dma_set_number_of_data(dma, chan, size / this->dmaWordSize());
         dma_enable_channel(dma, chan);
         if ((Opts & kDmaNoDoneIntr) == 0)
         {

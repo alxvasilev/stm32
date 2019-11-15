@@ -28,9 +28,9 @@ STM32PP_PERIPH_INFO(USART1)
     enum: uint32_t { kDmaTxId = DMA1, kDmaRxId = DMA1 };
     enum: uint8_t {
         kDmaTxChannel = DMA_CHANNEL4,
-        kDmaRxChannel = DMA_CHANNEL5,
-        kDmaWordSize = 1
+        kDmaRxChannel = DMA_CHANNEL5
     };
+    static const uint8_t dmaWordSize() { return 1; }
     static const uint32_t dmaRxDataRegister() { return (uint32_t)(&USART1_DR); }
     static const uint32_t dmaTxDataRegister() { return (uint32_t)(&USART1_DR); }
 };
@@ -42,9 +42,9 @@ STM32PP_PERIPH_INFO(USART2)
     enum: uint32_t { kDmaTxId = DMA1, kDmaRxId = DMA1 };
     enum: uint8_t {
         kDmaTxChannel = DMA_CHANNEL7,
-        kDmaRxChannel = DMA_CHANNEL6,
-        kDmaWordSize = 1
+        kDmaRxChannel = DMA_CHANNEL6
     };
+    static const uint8_t dmaWordSize() { return 1; }
     static const uint32_t dmaRxDataRegister() { return (uint32_t)(&USART2_DR); }
     static const uint32_t dmaTxDataRegister() { return (uint32_t)(&USART2_DR); }
 };
@@ -56,9 +56,9 @@ STM32PP_PERIPH_INFO(USART3)
     enum: uint32_t { kDmaTxId = DMA1, kDmaRxId = DMA1 };
     enum: uint8_t {
         kDmaTxChannel = DMA_CHANNEL2,
-        kDmaRxChannel = DMA_CHANNEL3,
-        kDmaWordSize = 1
+        kDmaRxChannel = DMA_CHANNEL3
     };
+    static const uint8_t dmaWordSize() { return 1; }
     static const uint32_t dmaRxDataRegister() { return (uint32_t)(&USART3_DR); }
     static const uint32_t dmaTxDataRegister() { return (uint32_t)(&USART3_DR); }
 };
