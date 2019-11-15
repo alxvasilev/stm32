@@ -23,6 +23,8 @@ struct Baudrate
 };
 
 uint8_t clockRatioToCode(uint8_t ratio);
+uint16_t codeToClockRatio(uint8_t code);
+
 uint32_t clockPrescaler(Baudrate rate, uint32_t apbFreq)
 {
     return clockRatioToCode((apbFreq + rate.mRate - 1) / rate.mRate); // round up
@@ -85,6 +87,10 @@ public:
             (config & kLsbFirst) ? SPI_CR1_LSBFIRST : SPI_CR1_MSBFIRST);
 
         spi_enable(SPI);
+    }
+    uint32_t baudrate() const
+    {
+        return this->apbFreq() / codeToClockRatio(SPI_CR1(SPI) & (0b111 << 3));
     }
     void send(uint16_t data)
     {

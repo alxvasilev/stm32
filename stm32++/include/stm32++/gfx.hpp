@@ -7,6 +7,7 @@
 
 #include <stm32++/timeutl.hpp>
 #include <stm32++/common.hpp>
+#include <stm32++/xassert.hpp>
 #include <string.h>
 #include <stm32++/font.hpp>
 #include <algorithm> //for std::swap
@@ -431,7 +432,7 @@ void drawTriangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t x
 }
 
 
-void drawFilledTriangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t x3, uint16_t y3, uint8_t color)
+void drawFilledTriangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t x3, uint16_t y3)
 {
     int16_t deltax = 0, deltay = 0, x = 0, y = 0, xinc1 = 0, xinc2 = 0,
     yinc1 = 0, yinc2 = 0, den = 0, num = 0, numadd = 0, numpixels = 0,
@@ -475,7 +476,7 @@ void drawFilledTriangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint
     }
 
     for (curpixel = 0; curpixel <= numpixels; curpixel++) {
-        drawLine(x, y, x3, y3, color);
+        drawLine(x, y, x3, y3);
 
         num += numadd;
         if (num >= den) {
@@ -488,7 +489,7 @@ void drawFilledTriangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint
     }
 }
 
-void drawCircle(int16_t x0, int16_t y0, int16_t r, uint8_t c)
+void drawCircle(int16_t x0, int16_t y0, int16_t r)
 {
     int16_t f = 1 - r;
     int16_t ddF_x = 1;
@@ -496,10 +497,10 @@ void drawCircle(int16_t x0, int16_t y0, int16_t r, uint8_t c)
     int16_t x = 0;
     int16_t y = r;
 
-    setPixel(x0, y0 + r, c);
-    setPixel(x0, y0 - r, c);
-    setPixel(x0 + r, y0, c);
-    setPixel(x0 - r, y0, c);
+    setPixel(x0, y0 + r);
+    setPixel(x0, y0 - r);
+    setPixel(x0 + r, y0);
+    setPixel(x0 - r, y0);
 
     while (x < y) {
         if (f >= 0) {
@@ -511,19 +512,19 @@ void drawCircle(int16_t x0, int16_t y0, int16_t r, uint8_t c)
         ddF_x += 2;
         f += ddF_x;
 
-        setPixel(x0 + x, y0 + y, c);
-        setPixel(x0 - x, y0 + y, c);
-        setPixel(x0 + x, y0 - y, c);
-        setPixel(x0 - x, y0 - y, c);
+        setPixel(x0 + x, y0 + y);
+        setPixel(x0 - x, y0 + y);
+        setPixel(x0 + x, y0 - y);
+        setPixel(x0 - x, y0 - y);
 
-        setPixel(x0 + y, y0 + x, c);
-        setPixel(x0 - y, y0 + x, c);
-        setPixel(x0 + y, y0 - x, c);
-        setPixel(x0 - y, y0 - x, c);
+        setPixel(x0 + y, y0 + x);
+        setPixel(x0 - y, y0 + x);
+        setPixel(x0 + y, y0 - x);
+        setPixel(x0 - y, y0 - x);
     }
 }
 
-void drawFilledCircle(int16_t x0, int16_t y0, int16_t r, uint8_t c)
+void drawFilledCircle(int16_t x0, int16_t y0, int16_t r)
 {
     int16_t f = 1 - r;
     int16_t ddF_x = 1;
