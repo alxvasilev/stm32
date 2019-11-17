@@ -76,8 +76,8 @@ public:
         SSD1306_96_16 = mkType(96,16)
     };
     uint8_t* rawBuf() { return mBuf; }
-    static uint16_t width() { return W; }
-    static uint16_t height() { return H; }
+    static int16_t width() { return W; }
+    static int16_t height() { return H; }
     SSD1306_Driver(IO& intf, uint8_t addr=0x3C): mIo(intf), mAddr(addr) {}
     bool init()
     {
@@ -173,6 +173,6 @@ public:
     }
 };
 
-template <class IO, uint16_t W, uint16_t H, uint8_t Opts=0>
+template <class IO, int16_t W, int16_t H, uint8_t Opts=0>
 using SSD1306 = DisplayGfx<SSD1306_Driver<IO, W, H, Opts>>;
 #endif

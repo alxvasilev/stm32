@@ -53,7 +53,7 @@
 #define ST7565_LCD_CMD_TEST                  0xF0
 */
 
-template <class IO, class RstPin, class DtCmdPin, uint16_t Width=128, uint16_t Height=64>
+template <class IO, class RstPin, class DtCmdPin, int16_t Width=128, int16_t Height=64>
 class ST7567_Driver
 {
 protected:
@@ -63,8 +63,8 @@ protected:
 public:
     ST7567_Driver(IO& io): mIo(io) {}
     uint8_t* rawBuf() { return mBuf; }
-    static uint16_t width() { return Width; }
-    static uint16_t height() { return Height; }
+    static int16_t width() { return Width; }
+    static int16_t height() { return Height; }
     void cmd(uint8_t byte) { mIo.send(byte); }
     void setContrast(uint8_t val)
     {

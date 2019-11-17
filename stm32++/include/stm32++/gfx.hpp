@@ -121,14 +121,14 @@ uint8_t putc(char ch)
     uint8_t symPages = (mFont->height + 7) / 8;
     uint8_t symLastPage = symPages - 1;
     const uint8_t* sym = mFont->data + (ch - 32) * fontW * symPages;
-    uint8_t* bufDest = Driver::mBuf + (mCurrentY >> 3) * Driver::width() + mCurrentX; //(ypos div 8) * width + xpos
+    uint8_t* bufDest = Driver::mBuf + (mCurrentY >> 3) * Driver::width() + mCurrentX;
 
     if (mCurrentY >= Driver::height())
     {
         return 0;
     }
     uint8_t writeWidth;
-    if (mCurrentX + fontW < Driver::width())
+    if (mCurrentX + fontW <= Driver::width())
     {
         writeWidth = fontW;
     }
@@ -382,7 +382,7 @@ void drawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
     }
 }
 
-void drawRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t c)
+void drawRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 {
     /* Check input parameters */
     if (
@@ -401,11 +401,10 @@ void drawRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t c)
         h = Driver::height() - y;
     }
 
-    /* Draw 4 lines */
-    drawLine(x, y, x + w, y, c);         /* Top line */
-    drawLine(x, y + h, x + w, y + h, c); /* Bottom line */
-    drawLine(x, y, x, y + h, c);         /* Left line */
-    drawLine(x + w, y, x + w, y + h, c); /* Right line */
+    drawLine(x, y, x + w, y);         // top
+    drawLine(x, y + h, x + w, y + h); // bottom
+    drawLine(x, y, x, y + h);         // left
+    drawLine(x + w, y, x + w, y + h); // right
 }
 
 void drawFilledRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
@@ -567,6 +566,72 @@ void drawFilledCircle(int16_t x0, int16_t y0, int16_t r)
         drawLine(x0 + y, y0 + x, x0 - y, y0 + x);
         drawLine(x0 + y, y0 - x, x0 - y, y0 - x);
     }
+}
+
+void invertRect(int16_t x, int16_t y, int16_t width, int16_t height)
+{
+    if (x >= Driver::width() || y >= Driver::height())
+    {
+        return;
+    }
+    if (y < 0)
+    {
+        if (-y < height)
+        {
+            height += y;
+            y = 0;
+        }
+        else
+        {
+            return;
+        }
+    }
+    if (x < 0)
+    {
+        if (width > -x)
+        {
+            width += x;
+            x = 0;
+        }
+        else
+        {
+            return;
+        }
+    }
+    int16_t xEnd = x + width;
+    if (xEnd > Driver::width())
+    {
+        xEnd = Driver::width();
+        width = Driver::width() - x;
+    }
+    uint8_t yBottom = y + height - 1;
+    if (yBottom >= Driver::height())
+    {
+        yBottom = Driver::height() - 1;
+        // no need to update height - it's not used further below
+    }
+
+    uint8_t page = y / 8;
+    uint8_t endPage = yBottom / 8;
+
+    uint8_t yTopOffset = y % 8;
+    uint8_t yBottomOffset = 7 - (yBottom % 8);
+    auto wend = Driver::mBuf + page * Driver::width() + width;
+    uint8_t xorMask = 0xff << yTopOffset;
+    do
+    {
+        if (page == endPage)
+        {
+            xorMask &= (0xff >> yBottomOffset);
+        }
+        for(auto wptr = wend - width; wptr < wend; wptr++)
+        {
+            *wptr ^= xorMask;
+        }
+        xorMask = 0xff;
+        wend += Driver::width();
+    }
+    while(++page <= endPage);
 }
 };
 #endif
