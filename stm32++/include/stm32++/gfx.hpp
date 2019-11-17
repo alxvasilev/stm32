@@ -114,7 +114,7 @@ void gotoXY(uint16_t x, uint16_t y)
     mCurrentY = y;
 }
 
-uint8_t putc(char ch)
+uint8_t putc(char ch, int16_t xLim=10000)
 {
     xassert(mFont);
     uint8_t fontW = mFont->width;
@@ -127,18 +127,19 @@ uint8_t putc(char ch)
     {
         return 0;
     }
+    xLim = std::min(Driver::width(), xLim);
     uint8_t writeWidth;
-    if (mCurrentX + fontW <= Driver::width())
+    if (mCurrentX + fontW <= xLim)
     {
         writeWidth = fontW;
     }
     else
     {
-        if (mCurrentX >= Driver::width())
+        if (mCurrentX >= xLim)
         {
             return 0;
         }
-        writeWidth = Driver::width() - mCurrentX;
+        writeWidth = xLim - mCurrentX;
     }
     uint8_t vOfs = (mCurrentY % 8); //offset within the vertical byte
     if (vOfs == 0)
@@ -264,19 +265,43 @@ uint8_t putc(char ch)
     return writeWidth;
 }
 
-bool puts(const char* str)
+bool puts(const char* str, int16_t xLim=10000)
 {
-    while (*str)
+    while(*str)
     {
         /* Write character by character */
-        auto writeWidth = putc(*str);
-        if (!writeWidth) {
+        auto writeWidth = putc(*str, xLim);
+        if (!writeWidth)
+        {
             return false;
         }
         mCurrentX += writeWidth + (mState & kFontHspaceMask);
+
         str++;
     }
     return true;
+}
+
+bool putsCentered(int16_t y, const char* str)
+{
+    int strWidth;
+    if (mFont->isMono())
+    {
+        strWidth = mFont->width() * strlen(str);
+    }
+    else
+    {
+        while(*str)
+        {
+            strWidth += mFont->widths[*str - 32];
+        }
+    }
+    if (strWidth > Driver::width())
+    {
+        return false;
+    }
+    gotoXY((Driver::width() - strWidth) / 2, y);
+    puts(str);
 }
 
 void hLine(uint16_t x1, uint16_t x2, uint16_t y)
