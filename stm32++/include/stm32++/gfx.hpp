@@ -123,6 +123,10 @@ uint8_t putc(char ch)
     const uint8_t* sym = mFont->data + (ch - 32) * fontW * symPages;
     uint8_t* bufDest = Driver::mBuf + (mCurrentY >> 3) * Driver::width() + mCurrentX; //(ypos div 8) * width + xpos
 
+    if (mCurrentY >= Driver::height())
+    {
+        return 0;
+    }
     uint8_t writeWidth;
     if (mCurrentX + fontW < Driver::width())
     {
@@ -184,9 +188,18 @@ uint8_t putc(char ch)
             }
         }
         if (onlyFirstLine)
+        {
             return writeWidth; //we don't span on the next byte (page)
-
+        }
+        auto bufEnd = Driver::mBuf + Driver::kBufSize;
         uint8_t wpage = 1;
+        wptr = bufDest + wpage*Driver::width();
+        wend = wptr + writeWidth;
+        if (wend > bufEnd)
+        {
+            return writeWidth;
+        }
+
         uint8_t secondPageMask = 0xff << displayFirstPageHeight; // low vOfs bits set
         uint8_t symLastPageHeight = mFont->height % 8;
         if (symLastPageHeight == 0)
@@ -205,9 +218,6 @@ uint8_t putc(char ch)
             symLastPageToFirstDisplayPageMask = firstLineFullMask & (0xff >> (8-symLastPageHeight));
             symLastPageToSecondDisplayPageMask = 0x00;
         }
-        wptr = bufDest+wpage*Driver::width();
-        wend = wptr+writeWidth;
-        assert(wend <= Driver::mBuf + Driver::kBufSize);
 
         for (int8_t rpage = 0; rpage <= symLastPage; rpage++)
         {
@@ -242,7 +252,10 @@ uint8_t putc(char ch)
                     wpage++;
                     wptr = bufDest +wpage * Driver::width();
                     wend = wptr + writeWidth;
-                    assert(wend <= Driver::mBuf+Driver::kBufSize);
+                    if (wend > bufEnd)
+                    {
+                        return writeWidth;
+                    }
                 }
                 *(wptr++) = b;
             }
