@@ -281,22 +281,25 @@ bool puts(const char* str, int16_t xLim=10000)
     }
     return true;
 }
-
-bool putsCentered(int16_t y, const char* str)
+int16_t textWidth(const char* str)
 {
     int strWidth;
     if (mFont->isMono())
     {
-        strWidth = mFont->width * strlen(str);
+        return (mFont->width + (mState & kFontHspaceMask)) * strlen(str) - (mState & kFontHspaceMask);
     }
-    else
+
+    strWidth = 0;
+    while(*str)
     {
-        strWidth = 0;
-        while(*str)
-        {
-            strWidth += mFont->widths[*str - 32];
-        }
+        strWidth += mFont->widths[*str - 32];
     }
+    return strWidth;
+}
+
+bool putsCentered(int16_t y, const char* str)
+{
+    auto strWidth = textWidth(str);
     if (strWidth > Driver::width())
     {
         return false;
