@@ -126,6 +126,8 @@ function(stm32_create_utility_targets imgname)
         set(binName "${imgnameNoExt}.bin")
     endif()
     add_custom_target(bin bash -c "arm-none-eabi-objcopy -O binary ./${imgname} ./${binName}" DEPENDS "${imgname}")
+    set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "./${binName}")
+
     if (optCustomOffset)
         add_custom_target(flash bash -c "${ENV_SCRIPTS_DIR}/flash.sh -o ${optCustomOffset} ./${binName}" DEPENDS bin)
     else()

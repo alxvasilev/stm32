@@ -1,52 +1,77 @@
 #ifndef STM32PP_MENU_HPP
 #define STM32PP_MENU_HPP
+#include <vector>
 
-namespace menu
+namespace nsmenu
 {
-enum: uint8_t Event {
+enum Event: uint8_t {
     kEventLeave=1,
     kEventBtnUp=2, kEventBtnDown=3, kEventBtnOk=4, kEventBtnBack=5
 };
-
 struct Item
 {
-    enum: uint8_t Type { kTypeMenu=1, kTypeInt, kTypeFloat, kTypeBool, kTypeEnum };
-    Type type;
+    enum Flags: uint8_t { kIsMenu = 1 };
     const char* text;
-    Item(Type aType, const char* aText): type(aType), text(aText){}
-    virtual const char* strValue() { return nullptr; }
+    uint8_t flags;
+    Item(const char* aText, uint8_t aFlags=0): text(aText), flags(aFlags){}
     virtual ~Item() {}
 };
 
-template <typename T, uint8_t Id, void(*ChangeHandler)(T newVal)=nullptr>
-struct Value: public Item
+struct IValue: public Item
+{
+    using Item::Item;
+    virtual const char* strValue() = 0;
+    virtual void* binValue(uint8_t& size) const = 0;
+    virtual const char* onEvent(Event evt) = 0;
+};
+
+template <typename T, uint8_t Id, bool(*ChangeHandler)(T newVal)=nullptr>
+struct Value: public IValue
 {
     enum: uint8_t { kValueId = Id };
     T value;
-    Value(Type aType, const char* aText, T aValue)
-        : Item(aType, aText), value(aValue) {}
-    virtual void onEvent(Event evt) {}
+    Value(const char* aText, T aValue): IValue(aText), value(aValue) {}
+    virtual void* binValue(uint8_t& size) const
+    {
+        size = sizeof(T);
+        return (void*)&value;
+    }
 };
 
-template <typename T, uint8_t Id, void(*ChangeHandler)(T newVal)=nullptr>
+template <typename T>
+struct DefaultStep
+{
+    template<typename X=T>
+    static constexpr typename std::enable_if<std::is_integral<X>::value, X>::type value()
+    {
+        return 1;
+    }
+    template<typename X=T>
+    static constexpr typename std::enable_if<!std::is_integral<X>::value, X>::type value()
+    {
+        return 0.1;
+    }
+};
+
+template <typename T, uint8_t Id,
+    bool(*ChangeHandler)(T newVal)=nullptr,
+    T Step=DefaultStep<T>::value(),
+    T Min=std::numeric_limits<T>::min(), T Max=std::numeric_limits<T>::max()>
 struct NumValue: public Value<T, Id, ChangeHandler>
 {
     enum: uint8_t { kEditBufSize = 18 };
-    T min = std::numeric_limits<T>::min;
-    T max = std::numeric_limits<T>::max;
     char* mEditBuf = nullptr;
-    NumValue(Type aType, const char* aText, uint8_t aId, T aValue, T aMin, T aMax)
-        : Value(aType, aText, aValue), min(aMin), max(aMax){}
+    NumValue(const char* aText, T defValue)
+        : Value<T, Id, ChangeHandler>(aText, defValue){}
     virtual const char* strValue()
     {
-        if (!mEditBuf)
-        {
+        if (!mEditBuf) {
             mEditBuf = new char[kEditBufSize];
-            toString(mEditBuf, kEditBufSize, value);
+            toString(mEditBuf, kEditBufSize, this->value);
         }
         return mEditBuf;
     }
-    virtual const char* onEvent(Event evt, uint8_t cursorX)
+    virtual const char* onEvent(Event evt)
     {
         xassert(mEditBuf);
         switch(evt)
@@ -56,143 +81,123 @@ struct NumValue: public Value<T, Id, ChangeHandler>
             mEditBuf = nullptr;
             return nullptr;
         case kEventBtnUp:
-            return onButtonUp(cursorX);
+            return onButtonUp();
         case kEventBtnDown:
-            return onButtonDown(cursorX);
+            return onButtonDown();
         default:
             __builtin_trap();
-            return;
-        }
-    }
-    std::enable_if<std::is_floating_point<T>::value, bool> isAtMin()
-    {
-        return fabs(value-min) <= 0;
-    }
-    std::enable_if<std::is_floating_point<T>::value, bool> isAtMax()
-    {
-        return fabs(value-max) >= 0;
-    }
-
-    std::enable_if<!std::is_integral<T>::value, bool> isAtMin()
-    {
-        return value <= min;
-    }
-    std::enable_if<!std::is_integral<T>::value, bool> isAtMax()
-    {
-        return value >= max;
-    }
-    const char* onButtonUp(uint8_t cursorX)
-    {
-        if (isAtMax())
-        {
             return nullptr;
         }
-        value += 1;
-        if (ChangeHandler)
-        {
-            ChangeHandler(value);
-        }
-        return toString(mEditBuf, kEditBufSize, value);
     }
-    const char* onButtonDown(uint8_t cursorX)
+    const char* onButtonUp()
     {
-        if (isAtMin())
-        {
+        if (this->value >= Max) {
             return nullptr;
         }
-        value -= 1;
-        if (ChangeHandler)
-        {
-            ChangeHandler(value);
+        if (!(void*)ChangeHandler) {
+            this->value += Step;
+        } else {
+            auto newVal = this->value + Step;
+            if (ChangeHandler(newVal)) {
+                this->value = newVal;
+            } else {
+                return nullptr;
+            }
         }
-        return toString(mEditBuf, kEditBufSize, value);
+        return toString(mEditBuf, kEditBufSize, this->value);
+    }
+    const char* onButtonDown()
+    {
+        if (this->value <= Min) {
+            return nullptr;
+        }
+        if (!(void*)ChangeHandler) {
+            this->value -= Step;
+        } else {
+            auto newVal = this->value - Step;
+            if (!ChangeHandler(newVal)) {
+                return nullptr;
+            } else {
+                this->value = newVal;
+            }
+        }
+        return toString(mEditBuf, kEditBufSize, this->value);
     }
 };
 
-template <uint8_t ValueId, void(*ChangeHandler)(T newVal)=nullptr>
+template <uint8_t ValueId, bool(*ChangeHandler)(uint8_t newVal)=nullptr>
 struct EnumValue: public Value<uint8_t, ValueId, ChangeHandler>
 {
     const char* enames[];
     uint8_t max;
     EnumValue(const char* aText, uint8_t aValue, const char* names[])
-        : Value(kTypeEnum, aText, aValue), enames(names)
+        : Value<uint8_t, ValueId, ChangeHandler>(aText, aValue), enames(names)
     {
         uint8_t cnt = 0;
         while(*(names++)) cnt++;
-        numVals = cnt;
+        max = cnt;
         xassert(aValue <= max);
     }
     virtual const char* strValue()
     {
-        return enames[value];
+        return enames[this->value];
     }
-    virtual const char* onEvent(Event evt, uint8_t cursorX)
+    virtual const char* onEvent(Event evt)
     {
         switch(evt)
         {
         case kEventLeave:
             return nullptr;
         case kEventBtnUp:
-            return onButtonUp(cursorX);
+            return onButtonUp();
         case kEventBtnDown:
-            return onButtonDown(cursorX);
+            return onButtonDown();
         default:
             __builtin_trap();
-            return;
+            return nullptr;
         }
     }
-    const char* onButtonUp(uint8_t cursorX)
+    const char* onButtonUp()
     {
-        if (value == max)
-        {
-            value = 0;
+        auto newVal = (this->value == max) ? 0 : this->value+1;
+        if (ChangeHandler) {
+            if (!ChangeHandler(newVal)) {
+                return nullptr;
+            }
         }
-        else
-        {
-            value++;
-        }
-        if (ChangeHandler)
-        {
-            ChangeHandler(value);
-        }
-        return enames[value];
+        this->value = newVal;
+        return enames[this->value];
     }
-    const char* onButtonDown(uint8_t cursorX)
+    const char* onButtonDown()
     {
-        if (value == 0)
-        {
-            value = max;
+        auto newVal = (this->value == 0) ? max : this->value-1;
+        if (ChangeHandler) {
+            if (!ChangeHandler(newVal)) {
+                return nullptr;
+            }
         }
-        else
-        {
-            value--;
-        }
-        if (ChangeHandler)
-        {
-            ChangeHandler(value);
-        }
-        return enames[value];
+        this->value = newVal;
+        return enames[this->value];
     }
 };
 
-template <uint8_t ValueId, void(*ChangeHandler)(T newVal)=nullptr>
-struct BoolValue: public EnumValue<uint8_t, ValueId, ChangeHandler>
+template <uint8_t ValueId, bool(*ChangeHandler)(uint8_t newVal)=nullptr>
+struct BoolValue: public EnumValue<ValueId, ChangeHandler>
 {
-    BoolValue(const char* aText, uint8_t aValue, const char* names[]=nullptr["yes", "no"])
-    : EnumValue(aText, aValue, names){}
+    BoolValue(const char* aText, uint8_t aValue, const char* names[]={"yes", "no"})
+    : EnumValue<ValueId, ChangeHandler>(aText, aValue, names){}
 };
 
-struct Menu: public MenuItem
+struct Menu: public Item
 {
     Menu* parentMenu;
-    std::vector<MenuItem*> items;
+    std::vector<Item*> items;
     Menu(Menu* aParent, const char* aText)
-        : Item(kTypeMenu, aText), parentMenu(aParent)
+    : Item(aText, kIsMenu), parentMenu(aParent)
     {}
     ~Menu()
     {
-        for (auto item: items)
-        {
+        for (auto item: items) {
             delete item;
         }
         items.clear();
@@ -213,34 +218,31 @@ struct MenuSystem
     MenuSystem(LCD& aLcd, const char* title, uint8_t aConfig=kMenuNoBackButton)
         : lcd(aLcd), menu(nullptr, title), mConfig(aConfig)
     {
-        mMaxItems = ((lcd.height() - 2) / lcd.font.height() - 1);
-        if (config & kMenuNoBackButton)
-        {
+        mMaxItems = ((lcd.height() - 2) / lcd.font().height - 1);
+        if (aConfig & kMenuNoBackButton) {
             menu.items.push_back(nullptr);
         }
     }
     void render()
     {
         lcd.clear();
-        lcd.putsCentered(y, title);
-        lcd.hLine(0, lcd.width()-1, lcd.font().height());
-        int16_t y = lcd.font.height() + 2;
-        auto end = mScrollOffset + mMaxItems;
-        for (uint8_t i = mScrollOffset; i < end; i++)
-        {
+        lcd.putsCentered(0, menu.text);
+        lcd.hLine(0, lcd.width()-1, lcd.font().height);
+        int16_t y = lcd.font().height + 2;
+        uint8_t end = mScrollOffset + mMaxItems;
+        if (menu.items.size() < end) {
+            end = menu.items.size();
+        }
+        for (uint8_t i = mScrollOffset; i < end; i++) {
             lcd.gotoXY(0, y);
-            auto item = items[i];
-            if (!item)
-            {
+            auto item = menu.items[i];
+            if (!item) {
                 lcd.puts("< Back", textWidth);
-            }
-            else
-            {
+            } else {
                 lcd.puts(item->text, textWidth);
-                if (item->type != Item::kTypeMenu)
-                {
-                    lcd.gotoXY(y, textWidth);
-                    lcd.puts(item->strValue());
+                if (!(item->flags & Item::kIsMenu)) {
+                    lcd.gotoXY(y, textWidth + 2);
+                    lcd.puts(static_cast<IValue*>(item)->strValue());
                 }
             }
         }

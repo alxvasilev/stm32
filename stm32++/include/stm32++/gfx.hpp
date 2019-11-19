@@ -287,10 +287,11 @@ bool putsCentered(int16_t y, const char* str)
     int strWidth;
     if (mFont->isMono())
     {
-        strWidth = mFont->width() * strlen(str);
+        strWidth = mFont->width * strlen(str);
     }
     else
     {
+        strWidth = 0;
         while(*str)
         {
             strWidth += mFont->widths[*str - 32];
@@ -302,6 +303,7 @@ bool putsCentered(int16_t y, const char* str)
     }
     gotoXY((Driver::width() - strWidth) / 2, y);
     puts(str);
+    return true;
 }
 
 void hLine(uint16_t x1, uint16_t x2, uint16_t y)
