@@ -114,6 +114,11 @@ void gotoXY(uint16_t x, uint16_t y)
     mCurrentY = y;
 }
 
+void gotoX(uint16_t x)
+{
+    mCurrentX = x;
+}
+
 uint8_t putc(char ch, int16_t xLim=10000)
 {
     xassert(mFont);
@@ -305,6 +310,18 @@ bool putsCentered(int16_t y, const char* str)
         return false;
     }
     gotoXY((Driver::width() - strWidth) / 2, y);
+    puts(str);
+    return true;
+}
+
+bool putsRAligned(int16_t y, const char* str, int16_t right=Driver::width()-1)
+{
+    auto left = right - textWidth(str) + 1;
+    if (left < 0)
+    {
+        return false;
+    }
+    gotoXY(left, y);
     puts(str);
     return true;
 }

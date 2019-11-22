@@ -8,6 +8,7 @@ GREEN="\033[0;32m"
 NOMARK="\033[0;0m"
 
 owndir=`echo "$(cd $(dirname "${BASH_SOURCE[0]}"); pwd)"`
+export STM32_ENV_DIR=$owndir
 
 if [ "$#" != "1" ]; then
     STM32_SYSROOT="$owndir/sysroot"
