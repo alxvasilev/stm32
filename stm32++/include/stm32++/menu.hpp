@@ -1,5 +1,6 @@
 #ifndef STM32PP_MENU_HPP
 #define STM32PP_MENU_HPP
+#include <stdint.h>
 #include <vector>
 
 namespace nsmenu
@@ -128,9 +129,9 @@ struct NumValue: public Value<T, Id, ChangeHandler>
 template <uint8_t ValueId, bool(*ChangeHandler)(uint8_t newVal)=nullptr>
 struct EnumValue: public Value<uint8_t, ValueId, ChangeHandler>
 {
-    const char* enames[];
     uint8_t max;
-    EnumValue(const char* aText, uint8_t aValue, const char* names[])
+    const char** enames;
+    EnumValue(const char* aText, uint8_t aValue, const char** names)
         : Value<uint8_t, ValueId, ChangeHandler>(aText, aValue), enames(names)
     {
         uint8_t cnt = 0;
@@ -160,7 +161,7 @@ struct EnumValue: public Value<uint8_t, ValueId, ChangeHandler>
     const char* onButtonUp()
     {
         auto newVal = (this->value == max) ? 0 : this->value+1;
-        if (ChangeHandler) {
+        if ((void*)ChangeHandler) {
             if (!ChangeHandler(newVal)) {
                 return nullptr;
             }
@@ -171,7 +172,7 @@ struct EnumValue: public Value<uint8_t, ValueId, ChangeHandler>
     const char* onButtonDown()
     {
         auto newVal = (this->value == 0) ? max : this->value-1;
-        if (ChangeHandler) {
+        if ((void*)ChangeHandler) {
             if (!ChangeHandler(newVal)) {
                 return nullptr;
             }
@@ -195,6 +196,17 @@ struct Menu: public Item
     Menu(Menu* aParent, const char* aText)
     : Item(aText, kIsMenu), parentMenu(aParent)
     {}
+    template<class T, typename... Args>
+    void addValue(Args... args)
+    {
+        items.push_back(new T(args...));
+    }
+    Menu* submenu(const char* name)
+    {
+        auto item = new Menu(this, name);
+        items.push_back(item);
+        return item;
+    }
     ~Menu()
     {
         for (auto item: items) {
@@ -202,49 +214,68 @@ struct Menu: public Item
         }
         items.clear();
     }
+
 };
 
 enum: uint8_t { kMenuNoBackButton = 1 };
 template <class LCD>
-struct MenuSystem
+struct MenuSystem: public Menu
 {
     LCD& lcd;
-    Menu menu;
-    Menu* mCurrent = &menu;
-    uint8_t mScrollOffset = 0;
-    uint8_t mMaxItems;
+    int16_t mTop;
+    int16_t mHeight;
+    Menu* mCurrentMenu = this;
+    int8_t mCurrentLine = 0;
+    int8_t mScrollOffset = 0;
+    int8_t mMaxItems;
     uint8_t mConfig;
-    uint8_t textWidth = 80;
-    MenuSystem(LCD& aLcd, const char* title, uint8_t aConfig=kMenuNoBackButton)
-        : lcd(aLcd), menu(nullptr, title), mConfig(aConfig)
+    MenuSystem(LCD& aLcd, const char* title, int16_t y, int16_t height=-1,
+        uint8_t aConfig=kMenuNoBackButton)
+    : Menu(nullptr, title), lcd(aLcd), mTop(y), mConfig(aConfig)
     {
-        mMaxItems = ((lcd.height() - 2) / lcd.font().height - 1);
+        if (height < 0) {
+            mHeight = LCD::height() - mTop;
+        } else {
+            xassert(mTop + mHeight <= LCD::height());
+            mHeight = height;
+        }
         if (aConfig & kMenuNoBackButton) {
-            menu.items.push_back(nullptr);
+            items.push_back(nullptr);
+        }
+    }
+    void goToLine(uint8_t line)
+    {
+        if (mCurrentLine > -1) {
+            //
         }
     }
     void render()
     {
+        mMaxItems = (mHeight - 5) / (lcd.font().height + 1) - 1;
         lcd.clear();
-        lcd.putsCentered(0, menu.text);
-        lcd.hLine(0, lcd.width()-1, lcd.font().height);
-        int16_t y = lcd.font().height + 2;
-        uint8_t end = mScrollOffset + mMaxItems;
-        if (menu.items.size() < end) {
-            end = menu.items.size();
+        auto y = mTop;
+        lcd.putsCentered(y, text);
+        y += lcd.font().height + 2;
+        lcd.hLine(0, lcd.width()-1, y);
+        y += 3;
+        uint8_t endItem = mScrollOffset + mMaxItems;
+        if (items.size() < endItem) {
+            endItem = items.size();
         }
-        for (uint8_t i = mScrollOffset; i < end; i++) {
+        for (uint8_t i = mScrollOffset; i < endItem; i++) {
             lcd.gotoXY(0, y);
-            auto item = menu.items[i];
+            auto item = items[i];
             if (!item) {
-                lcd.puts("< Back", textWidth);
+                lcd.puts("< Back");
             } else {
-                lcd.puts(item->text, textWidth);
-                if (!(item->flags & Item::kIsMenu)) {
-                    lcd.gotoXY(y, textWidth + 2);
-                    lcd.puts(static_cast<IValue*>(item)->strValue());
+                lcd.puts(item->text);
+                if (item->flags & Item::kIsMenu) {
+                    lcd.puts(" -->");
+                } else {
+                    lcd.putsRAligned(y, static_cast<IValue*>(item)->strValue());
                 }
             }
+            y += lcd.font().height + 1;
         }
     }
 };

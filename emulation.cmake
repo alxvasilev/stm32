@@ -23,11 +23,6 @@
 
 cmake_minimum_required(VERSION 3.0)
 
-find_package(wxWidgets COMPONENTS core base)
-if (NOT wxWidgets_FOUND)
-    message(STATUS "wxWidgets not found, GUI will not be available")
-endif()
-
 set(ENV_SCRIPTS_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
 # Default to debug build
@@ -42,15 +37,19 @@ set(STM32PP_SRCS
 )
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall" CACHE STRING "")
-set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS} -std=c++14 -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-threadsafe-statics ${wxWidgets_CXX_FLAGS}" CACHE STRING "")
-
-include_directories("${ENV_SCRIPTS_DIR}/stm32++/include" ${wxWidgets_INCLUDE_DIRS})
-link_directories(${wxWidgets_LIBRARY_DIRS})
-set(CMAKE_CPP_FLAGS "${CMAKE_CPP_FLAGS}" ${wxWidgets_DEFINITIONS})
-set(CMAKE_CPP_FLAGS_DEBUG "${CMAKE_CPP_FLAGS}" ${wxWidgets_DEFINITIONS_DEBUG})
+set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS} -std=c++14 -fno-exceptions -fno-rtti -fno-use-cxa-atexit -fno-threadsafe-statics" CACHE STRING "")
 add_definitions(-DSTM32PP_NOT_EMBEDDED=1)
+
+include_directories("${ENV_SCRIPTS_DIR}/stm32++/include")
+
+# Note that for MinGW users the order of libs is important!
+find_package(wxWidgets COMPONENTS core base)
+if(wxWidgets_FOUND)
+  include(${wxWidgets_USE_FILE})
+  link_libraries(${wxWidgets_LIBRARIES})
+endif()
+
 function(stm32_create_utility_targets imgname)
-    target_link_libraries(${imgname} ${wxWidgets_LIBRARIES})
     add_custom_target(gdb
         gdb -ex 'file ${CMAKE_CURRENT_BINARY_DIR}/${imgname}'
         -ex 'directory ${CMAKE_CURRENT_SOURCE_DIR}'
