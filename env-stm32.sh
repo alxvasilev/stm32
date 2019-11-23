@@ -22,14 +22,17 @@ if [ ! -d "$STM32_SYSROOT" ]; then
    return 2
 fi
 
-STM32_CMAKE_TOOLCHAIN="$owndir/stm32-toolchain.cmake"
-export CMAKE_XCOMPILE_ARGS="-DCMAKE_TOOLCHAIN_FILE=$STM32_CMAKE_TOOLCHAIN"
-
 function xcmake
 {
-    cmake $CMAKE_XCOMPILE_ARGS "$@"
+    cmake "-DCMAKE_TOOLCHAIN_FILE=$owndir/stm32-toolchain.cmake" "$@"
 }
 export -f xcmake
+
+function ecmake
+{
+    cmake "-DCMAKE_MODULE_PATH=$owndir" "$@"
+}
+export -f ecmake
 
 function ocmd
 {
@@ -73,13 +76,15 @@ alias strip=arm-none-eabi-strip
 
 echo -e "\
 ===================================================================
-Your environment has been set up for STM32 cross-compilation and simulation.
+Your environment has been set up for STM32 cross-compilation and emulation.
+${STM32_GREEN}STM32_ENV_DIR${STM32_NOMARK}=$owndir
 Use '${STM32_GREEN}xcmake${STM32_NOMARK}' instead of 'cmake' in order to configure project for
 cross-compilation
 Use '${STM32_GREEN}flash${STM32_NOMARK}' to flash chip, see flash --help for details
 Use '${STM32_GREEN}ocmd${STM32_NOMARK} <commands>' to send any command to OpenOCD.
-Include ${STM32_GREEN}\${STM32_ENV_DIR}/emulation.cmake${STM32_NOMARK} in a regular non cross-compilation
-CMake build in order to build and debug hardware-independent parts of
-firmware code as a PC application
+Use '${STM32_GREEN}ecmake${STM32_NOMARK}' instead of 'cmake' in order to configure project for emulation.
+The project should '${STM32_GREEN}include(stm32++-emulation)${STM32_NOMARK}'. It will use the native
+PC toolchain and build a PC executable. This can be used for development and
+debugging of hardware-independent parts of firmware code as a PC application
 ${STM32_BOLD}Enjoy programming!${STM32_NOMARK}
 ==================================================================="
