@@ -2,10 +2,6 @@
 # @author Alexander Vassilev
 # @copyright BSD License
 
-MARK="\033[1;30m"
-NOMARK="\033[0;0m"
-ERR="\033[0;31m"
-
 STM_VERSION=1_bluepill
 #STM_VERSION=1
 
@@ -22,12 +18,12 @@ in="$owndir/openocd.stdin"
 pid=`pidof openocd`
 if [ -z $pid ]; then
     if [ ! -p "$in" ]; then
-        echo -e "${MARK}Creating named pipe '$in' for openOCD and semihosting stdin${NOMARK}"
+        echo -e "${STM32_BOLD}Creating named pipe '$in' for openOCD and semihosting stdin${STM32_NOMARK}"
         rm -f "$in"
         mkfifo "$in"
     fi
 
-    echo -e "${MARK}OpenOCD not running, starting it and waiting for it to open telnet port...${NOMARK}"
+    echo -e "${STM32_BOLD}OpenOCD not running, starting it and waiting for it to open telnet port...${STM32_NOMARK}"
     openocd \
         -f /usr/share/openocd/scripts/interface/stlink-v2.cfg \
         -f /usr/share/openocd/scripts/target/stm32f${STM_VERSION}x.cfg \
@@ -47,7 +43,7 @@ if [ -z $pid ]; then
     do
         ((checks++))
         if [ "$checks" -gt "60" ]; then
-            echo -e "\n${ERR}Timed out waiting for OpenOCD to start${NOMARK}"
+            echo -e "\n${STM32_RED}Timed out waiting for OpenOCD to start${STM32_NOMARK}"
             exit 1
         else
             echo -n '.'
@@ -59,7 +55,7 @@ if [ -z $pid ]; then
     fi
 
     pid=`pidof openocd`
-    echo -e "${MARK}OpenOCD telnet port detected, openOCD pid is $pid, proceeding with command(s)${NOMARK}"
+    echo -e "${STM32_MARK}OpenOCD telnet port detected, openOCD pid is $pid, proceeding with command(s)${STM32_NOMARK}"
 
     # Disable openocd outputting stuff to the terminal that started it
     echo -e "log_output /dev/null\nexit" | (nc localhost 4444 2>&1) > /dev/null

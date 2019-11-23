@@ -3,9 +3,10 @@
 # @author Alexander Vassilev
 # @copyright BSD License
 
-export RED='\033[1;31m'
-GREEN="\033[0;32m"
-NOMARK="\033[0;0m"
+export STM32_RED="\033[1;31m"
+export STM32_GREEN="\033[0;32m"
+export STM32_NOMARK="\033[0;0m"
+export STM32_BOLD="\033[30;1m"
 
 owndir=`echo "$(cd $(dirname "${BASH_SOURCE[0]}"); pwd)"`
 export STM32_ENV_DIR=$owndir
@@ -17,7 +18,7 @@ else
 fi
 
 if [ ! -d "$STM32_SYSROOT" ]; then
-   echo -e "${RED}sysroot '$STM32_SYSROOT' dir does not exist${NOMARK}"
+   echo -e "${STM32_RED}sysroot '$STM32_SYSROOT' dir does not exist${STM32_NOMARK}"
    return 2
 fi
 
@@ -71,12 +72,14 @@ alias nm=arm-none-eabi-nm
 alias strip=arm-none-eabi-strip
 
 echo -e "\
-===================================================================\n\
-Your environment has been set up for STM32 cross-compilation.\n\
-SYSROOT=$STM32_SYSROOT\n
-Use '${GREEN}xcmake${NOMARK}' instead of 'cmake' in order to configure project for\n\
-cross-compilation\n\
-Use '${GREEN}flash${NOMARK}' to flash chip, see flash --help for details\n\
-Use '${GREEN}ocmd${NOMARK} <commands>' to send any command to OpenOCD.\n\
-Enjoy programming!
+===================================================================
+Your environment has been set up for STM32 cross-compilation and simulation.
+Use '${STM32_GREEN}xcmake${STM32_NOMARK}' instead of 'cmake' in order to configure project for
+cross-compilation
+Use '${STM32_GREEN}flash${STM32_NOMARK}' to flash chip, see flash --help for details
+Use '${STM32_GREEN}ocmd${STM32_NOMARK} <commands>' to send any command to OpenOCD.
+Include ${STM32_GREEN}\${STM32_ENV_DIR}/emulation.cmake${STM32_NOMARK} in a regular non cross-compilation
+CMake build in order to build and debug hardware-independent parts of
+firmware code as a PC application
+${STM32_BOLD}Enjoy programming!${STM32_NOMARK}
 ==================================================================="
