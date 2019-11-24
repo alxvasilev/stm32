@@ -102,9 +102,9 @@ protected:
          };
     struct RepeatState
     {
-        enum { kInitialPeriodMs10 = 40 }; //x10 milliseconds
-        uint32_t mLastTs;
-        uint8_t mDelayToRptStartMs10 = 100; // 1 second by default, can be configured per button
+        enum { kInitialPeriodMs10 = 20, kAccelIntervalMs10 = 40 }; //x10 milliseconds
+        uint32_t mLastTs; // the time of the last event
+        uint8_t mDelayToHoldEventMs10 = 100; // 1 second by default, can be configured per button
         uint8_t mTimeToNextMs10;
         uint8_t mRepeatCnt;
     };
@@ -196,7 +196,7 @@ public:
                         // record timestamp for newly pressed repeatable buttons
                         auto& rptState = mRptStates[idx-kRptShift];
                         rptState.mLastTs = now;
-                        rptState.mTimeToNextMs10 = rptState.mDelayToRptStartMs10;
+                        rptState.mTimeToNextMs10 = rptState.mDelayToHoldEventMs10;
                         rptState.mRepeatCnt = 0;
                     }
                 }
@@ -218,32 +218,29 @@ public:
                 uint32_t ms10 = Driver::ms10ElapsedSince(rptState.mLastTs);
                 if (ms10 < rptState.mTimeToNextMs10)
                 {
-                    continue; //too early for repeat
+                    continue; //too early for next event
                 }
+                // time for next event has come
                 rptState.mLastTs = now;
-                if (rptState.mTimeToNextMs10 == rptState.mDelayToRptStartMs10)
+                if (rptState.mTimeToNextMs10 == rptState.mDelayToHoldEventMs10)
                 {
-                    // we just completed the initial delay, switch to repeat
-                    // by setting the repeat delay as the new target
+                    // The event that has come is "hold". Switch to repeat by setting
+                    // the time to next event to the initial repeat period
                     rptState.mTimeToNextMs10 = RepeatState::kInitialPeriodMs10;
                     rptState.mRepeatCnt = 0;
                     mHandler(mask, kEventHold, mHandlerUserp);
                 }
-                else // repeat mode
+                else // The event that has come is "repeat"
                 {
                     // Calculate how much time we have spent at this repeat frequency
-                    uint16_t dur = (++rptState.mRepeatCnt) * rptState.mTimeToNextMs10;
-                    if (dur > 150)
+                    // NOTE: When we have reached the maximum repeat frequency (mTimeToNextMs reaches 1)
+                    // mRepeatCnt will eventually wrap, because we don't reset it anymore.
+                    // That's ok, as we only need it to trigger next increase in rpt frequency,
+                    // which we can't anymore
+                    uint16_t durMs10 = (++rptState.mRepeatCnt) * rptState.mTimeToNextMs10;
+                    if (durMs10 > RepeatState::kAccelIntervalMs10)
                     {
-                        if (rptState.mTimeToNextMs10 > 2)
-                        {
-                           rptState.mTimeToNextMs10 -= 1;
-                           rptState.mRepeatCnt = 0;
-                        }
-                    }
-                    else if (dur > 70)
-                    {
-                        if (rptState.mTimeToNextMs10 >= 10)
+                        if (rptState.mTimeToNextMs10 >= 2)
                         {
                            rptState.mTimeToNextMs10 >>= 1;
                            rptState.mRepeatCnt = 0;
@@ -271,7 +268,7 @@ public:
         }
         idx -= kRptShift;
         auto& state = mRptStates[idx];
-        state.mDelayToRptStart10 = (timeMs + 5) / 10;
+        state.mDelayToHoldEventMs10 = (timeMs + 5) / 10;
     }
     /** @brief Sets the user pointer that is passed to the event handler */
     void setHandlerUserp(void* userp) { mHandlerUserp = userp; }
