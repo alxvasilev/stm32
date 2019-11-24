@@ -23,8 +23,8 @@ namespace btn
 /** @brief Button event type */
 enum: uint8_t
 {
-    kEventRelease = 0, //< Button up
-    kEventPress = 1,   //< Button down
+    kEventUp = 0,      //< Button up
+    kEventDown = 1,    //< Button down
     kEventHold = 2,    //< Button held
     kEventRepeat = 3   //< Button repeat, generated when the button is held pressed
 };
@@ -52,7 +52,7 @@ enum: uint8_t { kNoIrq = 127 };
  * @param arg - The user pointer that was passed to the Buttons instance
  * at construction or set via \c setUserp()
  */
-typedef void(*EventCb)(uint16_t btn, uint8_t event, void* userp);
+typedef void(*EventCb)(uint8_t btn, uint8_t event, void* userp);
 
 class HwDriver;
 
@@ -190,7 +190,7 @@ public:
                 uint8_t event;
                 if (pinState) //just pressed
                 {
-                    event = kEventPress;
+                    event = kEventDown;
                     if (kRptCount && (pinState & RepeatPins))
                     {
                         // record timestamp for newly pressed repeatable buttons
@@ -202,9 +202,9 @@ public:
                 }
                 else
                 {
-                    event = kEventRelease;
+                    event = kEventUp;
                 }
-                mHandler(mask, event, mHandlerUserp);
+                mHandler(idx, event, mHandlerUserp);
             }
             else // button state didn't change
             {
@@ -228,7 +228,7 @@ public:
                     // the time to next event to the initial repeat period
                     rptState.mTimeToNextMs10 = RepeatState::kInitialPeriodMs10;
                     rptState.mRepeatCnt = 0;
-                    mHandler(mask, kEventHold, mHandlerUserp);
+                    mHandler(idx, kEventHold, mHandlerUserp);
                 }
                 else // The event that has come is "repeat"
                 {
@@ -246,7 +246,7 @@ public:
                            rptState.mRepeatCnt = 0;
                         }
                     }
-                    mHandler(mask, kEventRepeat, mHandlerUserp);
+                    mHandler(idx, kEventRepeat, mHandlerUserp);
                 }
             }
         }

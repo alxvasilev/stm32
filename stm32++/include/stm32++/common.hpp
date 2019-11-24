@@ -1,6 +1,13 @@
 #ifndef STM32PP_COMMON_HPP
 #define STM32PP_COMMON_HPP
 
+/**
+  Utility routines, classes and definitions for the STM32++ library
+  @author Alexander Vassilev
+  @copyright BSD License
+*/
+
+
 // Define a class to check whether a class has a member
 #define TYPE_SUPPORTS(ClassName, Expr)                                 \
 template <typename C> struct ClassName {                               \

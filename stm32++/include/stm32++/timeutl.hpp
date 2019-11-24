@@ -1,4 +1,5 @@
 /**
+  Timing utilities for STM32
  * @author Alexander Vassilev
  * @copyright BSD license
  */

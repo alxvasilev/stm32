@@ -1,12 +1,11 @@
 /**
- * @author: Alexander Vassilev
-   @copyright BSD License
+  LCD Graphics and text layer
+  @author: Alexander Vassilev
+  @copyright BSD License
  */
 #ifndef GFX_HPP_INCLUDED
 #define GFX_HPP_INCLUDED
 
-#include <stm32++/timeutl.hpp>
-#include <stm32++/common.hpp>
 #include <stm32++/xassert.hpp>
 #include <string.h>
 #include <stm32++/font.hpp>
@@ -48,8 +47,7 @@ public:
     uint8_t charSpacing() const { return mState & kFontHspaceMask; }
     uint8_t charWidthWithSpacing() const { return mFont->width + charSpacing(); }
     bool isInverted() const { return mState & kStateInverted; }
-    template <class IO, typename... Args>
-    DisplayGfx(IO& intf, Args... args): Driver(intf, args...){}
+    using Driver::Driver;
 bool init()
 {
     if (!Driver::init())
@@ -288,6 +286,7 @@ bool puts(const char* str, int16_t xLim=10000)
 }
 int16_t textWidth(const char* str)
 {
+    xassert(mFont);
     int strWidth;
     if (mFont->isMono())
     {
