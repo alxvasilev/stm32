@@ -42,6 +42,8 @@ enum: uint8_t
     kOptNoInternalPuPd = 2
 };
 
+enum: uint8_t { kNoIrq = 127 };
+
 /** @brief Button handler callback.
  * Called when a button event occurs
  * @param btn - The bit position of the button pin within the GPIO port,
@@ -69,13 +71,13 @@ class HwDriver;
  * @param APollIrqN The IRQ number of an interrupt that calls the poll()
  * function. This is needed to temporarily disable the interrupt that
  * does the polling, to prevent re-entrancy. If polling is done in main(),
- * this should be set to 127.
+ * this should be set to kNoIrq (127).
  * @param ADebounceDly Debounce interval in milliseconds. If the pin maintains the
  * same state within at least this period, then its state is considered
  * stable.
 */
 template <uint32_t APort, uint16_t APins, uint16_t ARpt, uint8_t AFlags=0,
-          uint8_t APollIrqN=127, uint8_t ADebounceDly=10, class Driver=HwDriver>
+          uint8_t APollIrqN=kNoIrq, uint8_t ADebounceDly=10, class Driver=HwDriver>
 class Buttons
 {
 public:
@@ -100,7 +102,7 @@ protected:
          };
     struct RepeatState
     {
-        enum { kDelayRepeatInitialMs10 = 40 }; //x10 milliseconds
+        enum { kInitialDelayMs10 = 40 }; //x10 milliseconds
         uint32_t mLastTs;
         uint8_t mRptStartDelayMs10 = 100; // 1 second by default, can be configured per button
         uint8_t mTimeToNextMs10;
@@ -166,7 +168,7 @@ public:
         uint32_t now = Driver::now();
         // atomically make a snapshot of the current button state and change flags
         bool intsWereEnabled;
-        if (APollIrqN != 127)
+        if (APollIrqN != kNoIrq)
         {
             intsWereEnabled = Driver::isIrqEnabled(APollIrqN);
             if (intsWereEnabled)
@@ -175,7 +177,7 @@ public:
         uint16_t state = mState;
         uint16_t changed = mChanged;
         mChanged = 0;
-        if ((APollIrqN != 127) && intsWereEnabled)
+        if ((APollIrqN != kNoIrq) && intsWereEnabled)
         {
             Driver::enableIrq(APollIrqN);
         }
@@ -223,7 +225,7 @@ public:
                 {
                     // we just completed the initial delay, switch to repeat
                     // by setting the repeat delay as the new target
-                    rptState.mTimeToNextMs10 = RepeatState::kDelayRepeatInitialMs10;
+                    rptState.mTimeToNextMs10 = RepeatState::kInitialDelayMs10;
                     rptState.mRepeatCnt = 0;
                     mHandler(mask, kEventHold, mHandlerUserp);
                 }
