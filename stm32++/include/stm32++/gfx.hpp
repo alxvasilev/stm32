@@ -44,6 +44,7 @@ public:
     Color drawColor() const { return mColor; }
     void setFont(Font& font) { mFont = &font; }
     const Font& font() const { return *mFont; }
+    bool hasFont() const { return mFont != nullptr; }
     uint8_t charSpacing() const { return mState & kFontHspaceMask; }
     uint8_t charWidthWithSpacing() const { return mFont->width + charSpacing(); }
     bool isInverted() const { return mState & kStateInverted; }

@@ -132,10 +132,10 @@ public:
     wxColor mPixelColor = wxColor(0x50, 0x50, 0x50);
     bool mIsARLocked = true;
     // LCD driver API
-    int16_t width() { return Width; }
-    int16_t height() { return Height; }
+    static int16_t width() { return Width; }
+    static int16_t height() { return Height; }
     uint8_t* rawBuf() { return mBuf; }
-    void updateDisplay()
+    void updateScreen()
     {
         Refresh();
         Update();

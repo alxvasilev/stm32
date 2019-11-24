@@ -229,14 +229,14 @@ struct MenuSystem: public Menu
     int8_t mScrollOffset = 0;
     int8_t mMaxItems;
     uint8_t mConfig;
-    MenuSystem(LCD& aLcd, const char* title, int16_t y, int16_t height=-1,
+    MenuSystem(LCD& aLcd, const char* title, int16_t y=0, int16_t height=-1,
         uint8_t aConfig=kMenuNoBackButton)
     : Menu(nullptr, title), lcd(aLcd), mTop(y), mConfig(aConfig)
     {
         if (height < 0) {
-            mHeight = LCD::height() - mTop;
+            mHeight = lcd.height() - mTop;
         } else {
-            xassert(mTop + mHeight <= LCD::height());
+            xassert(mTop + mHeight <= lcd.height());
             mHeight = height;
         }
         if (aConfig & kMenuNoBackButton) {
@@ -251,6 +251,7 @@ struct MenuSystem: public Menu
     }
     void render()
     {
+        xassert(lcd.hasFont());
         mMaxItems = (mHeight - 5) / (lcd.font().height + 1) - 1;
         lcd.clear();
         auto y = mTop;
