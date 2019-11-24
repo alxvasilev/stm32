@@ -102,9 +102,9 @@ protected:
          };
     struct RepeatState
     {
-        enum { kInitialDelayMs10 = 40 }; //x10 milliseconds
+        enum { kInitialPeriodMs10 = 40 }; //x10 milliseconds
         uint32_t mLastTs;
-        uint8_t mRptStartDelayMs10 = 100; // 1 second by default, can be configured per button
+        uint8_t mDelayToRptStartMs10 = 100; // 1 second by default, can be configured per button
         uint8_t mTimeToNextMs10;
         uint8_t mRepeatCnt;
     };
@@ -196,7 +196,7 @@ public:
                         // record timestamp for newly pressed repeatable buttons
                         auto& rptState = mRptStates[idx-kRptShift];
                         rptState.mLastTs = now;
-                        rptState.mTimeToNextMs10 = rptState.mRptStartDelayMs10;
+                        rptState.mTimeToNextMs10 = rptState.mDelayToRptStartMs10;
                         rptState.mRepeatCnt = 0;
                     }
                 }
@@ -221,11 +221,11 @@ public:
                     continue; //too early for repeat
                 }
                 rptState.mLastTs = now;
-                if (rptState.mTimeToNextMs10 == rptState.mRptStartDelayMs10)
+                if (rptState.mTimeToNextMs10 == rptState.mDelayToRptStartMs10)
                 {
                     // we just completed the initial delay, switch to repeat
                     // by setting the repeat delay as the new target
-                    rptState.mTimeToNextMs10 = RepeatState::kInitialDelayMs10;
+                    rptState.mTimeToNextMs10 = RepeatState::kInitialPeriodMs10;
                     rptState.mRepeatCnt = 0;
                     mHandler(mask, kEventHold, mHandlerUserp);
                 }
@@ -271,7 +271,7 @@ public:
         }
         idx -= kRptShift;
         auto& state = mRptStates[idx];
-        state.mRptStartDelayMs10 = (timeMs + 5) / 10;
+        state.mDelayToRptStart10 = (timeMs + 5) / 10;
     }
     /** @brief Sets the user pointer that is passed to the event handler */
     void setHandlerUserp(void* userp) { mHandlerUserp = userp; }
