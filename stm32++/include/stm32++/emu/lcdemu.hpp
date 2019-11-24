@@ -224,24 +224,24 @@ class LcdPanel: public wxPanel
 {
 public:
     typedef DisplayGfx<LcdDriver<Width, Height>> LcdDisplay;
-    typedef ButtonPanel<Pins, RptPins, Flags> Buttons;
-    LcdDisplay* lcd;
-    Buttons* buttons;
+    typedef ButtonPanel<Pins, RptPins, Flags> BtnPanel;
+    LcdDisplay* mLcd;
+    BtnPanel* mBtnPanel;
     typedef LcdPanel<Width, Height, Pins, RptPins, Flags> Self;
     LcdPanel(wxWindow* parent, btn::EventCb handler)
     : wxPanel(parent)
     {
-        lcd = new LcdDisplay(this);
+        mLcd = new LcdDisplay(this);
         auto sizer = new wxBoxSizer(wxVERTICAL);
-        sizer->Add(lcd, 1, wxEXPAND|wxALL);
-        buttons = new Buttons(this, handler, parent);
-        sizer->Add(buttons, 0, wxEXPAND|wxALL);
+        sizer->Add(mLcd, 1, wxEXPAND|wxALL);
+        mBtnPanel = new BtnPanel(this, handler, wxTheApp);
+        sizer->Add(mBtnPanel, 0, wxEXPAND|wxALL);
         SetSizer(sizer);
     }
     wxSize minSize() const
     {
-        auto minSize = lcd->minSize();
-        return wxSize(minSize.GetWidth(), minSize.GetHeight() + buttons->GetSize().GetHeight());
+        auto minSize = mLcd->minSize();
+        return wxSize(minSize.GetWidth(), minSize.GetHeight() + mBtnPanel->GetSize().GetHeight());
     }
 };
 
@@ -254,15 +254,11 @@ public:
     typedef LcdPanel<Width, Height, Pins, RptPins, Flags> Panel;
     App& mApp;
     Panel* mPanel;
-    decltype(mPanel->lcd) lcd;
-    decltype(mPanel->buttons->buttons) buttons;
     ButtonFrame(App& app, const wxString& title, const wxPoint& pos, const wxSize& size)
         : wxFrame(NULL, wxID_ANY, title, pos, size), mApp(app)
     {
         mPanel = new Panel(this, App::buttonHandler);
-        lcd = mPanel->lcd;
-        buttons = mPanel->buttons->buttons;
-        SetSizeHints(mPanel->minSize(), wxDefaultSize, lcd->sizeInc());
+        SetSizeHints(mPanel->minSize(), wxDefaultSize, mPanel->mLcd->sizeInc());
         Connect(wxEVT_SHOW, wxShowEventHandler(Self::onShow));
     }
     void onShow(wxShowEvent& evt)
@@ -284,6 +280,8 @@ public:
     typedef ButtonFrame<App, Width, Height, Pins, RptPins, Flags> Frame;
     enum {kTimerId = wxID_HIGHEST + 1};
     Frame* mFrame;
+    decltype(mFrame->mPanel->mLcd) lcd;
+    decltype(mFrame->mPanel->mBtnPanel->buttons)* buttons;
     wxTimer* mTimer = nullptr;
     int FilterEvent(wxEvent& event)
     {
@@ -306,6 +304,9 @@ public:
     virtual bool OnInit()
     {
         mFrame = new Frame((App&)*this, "STM32 LCD Emulator", wxDefaultPosition, wxSize(500, 300));
+        lcd = mFrame->mPanel->mLcd;
+        buttons = &mFrame->mPanel->mBtnPanel->buttons;
+
         mFrame->CenterOnScreen();
         mFrame->Show(true);
         return true;
@@ -335,8 +336,8 @@ public:
     }
     virtual void onTimer(wxTimerEvent& evt)
     {
-        mFrame->buttons.poll();
-        mFrame->buttons.process();
+        buttons->poll();
+        buttons->process();
     }
 };
 
