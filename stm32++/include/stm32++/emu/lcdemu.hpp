@@ -13,7 +13,6 @@
 #include <stm32++/gfx.hpp>
 #include <wx/time.h>
 
-
 class BtnDriver;
 struct IButtonHandler
 {
