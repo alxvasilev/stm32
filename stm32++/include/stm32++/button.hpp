@@ -104,7 +104,7 @@ protected:
     {
         enum { kInitialPeriodMs10 = 20, kAccelIntervalMs10 = 40 }; //x10 milliseconds
         uint32_t mLastTs; // the time of the last event
-        uint8_t mDelayToHoldEventMs10 = 100; // 1 second by default, can be configured per button
+        uint8_t mDelayToHoldEventMs10 = 33; // 1 second by default, can be configured per button
         uint8_t mTimeToNextMs10;
         uint8_t mRepeatCnt;
     };

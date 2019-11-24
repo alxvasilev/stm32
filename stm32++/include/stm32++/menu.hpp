@@ -131,12 +131,15 @@ struct EnumValue: public Value<uint8_t, ValueId, ChangeHandler>
 {
     uint8_t max;
     const char** enames;
-    EnumValue(const char* aText, uint8_t aValue, const char** names)
-        : Value<uint8_t, ValueId, ChangeHandler>(aText, aValue), enames(names)
+    EnumValue(const char* aText, uint8_t aValue, std::initializer_list<const char*> names)
+        : Value<uint8_t, ValueId, ChangeHandler>(aText, aValue)
     {
-        uint8_t cnt = 0;
-        while(*(names++)) cnt++;
-        max = cnt;
+        enames = new const char*[names.size()];
+        max = names.size()-1;
+        int ctr = 0;
+        for (auto name: names) {
+            enames[ctr++] = name;
+        }
         xassert(aValue <= max);
     }
     virtual const char* strValue()
@@ -185,7 +188,7 @@ struct EnumValue: public Value<uint8_t, ValueId, ChangeHandler>
 template <uint8_t ValueId, bool(*ChangeHandler)(uint8_t newVal)=nullptr>
 struct BoolValue: public EnumValue<ValueId, ChangeHandler>
 {
-    BoolValue(const char* aText, uint8_t aValue, const char* names[]={"yes", "no"})
+    BoolValue(const char* aText, uint8_t aValue, std::initializer_list<const char*> names={"yes", "no"})
     : EnumValue<ValueId, ChangeHandler>(aText, aValue, names){}
 };
 
@@ -201,6 +204,12 @@ struct Menu: public Item
     {
         items.push_back(new T(args...));
     }
+    template<uint8_t Id, bool(*ChangeHandler)(uint8_t newVal)>
+    void addEnum(const char* text, uint8_t val, std::initializer_list<const char*>names={"yes", "no"})
+    {
+        items.push_back(new EnumValue<Id, ChangeHandler>(text, val, names));
+    }
+
     Menu* submenu(const char* name)
     {
         auto item = new Menu(this, name);
@@ -224,11 +233,17 @@ struct MenuSystem: public Menu
     LCD& lcd;
     int16_t mTop;
     int16_t mHeight;
+    int8_t mFontHeight;
     Menu* mCurrentMenu = this;
-    int8_t mCurrentLine = 0;
+    int8_t mSelIdx = 0;
     int8_t mScrollOffset = 0;
     int8_t mMaxItems;
     uint8_t mConfig;
+    int8_t mCurrLine = -1;
+    int8_t screenSelPos() const
+    {
+       return mSelIdx - mScrollOffset;
+    }
     MenuSystem(LCD& aLcd, const char* title, int16_t y=0, int16_t height=-1,
         uint8_t aConfig=kMenuNoBackButton)
     : Menu(nullptr, title), lcd(aLcd), mTop(y), mConfig(aConfig)
@@ -243,27 +258,61 @@ struct MenuSystem: public Menu
             items.push_back(nullptr);
         }
     }
-    void goToLine(uint8_t line)
+    void onButtonUp()
     {
-        if (mCurrentLine > -1) {
-            //
+        if (mSelIdx == 0) {
+            return;
         }
+        if (mSelIdx == mScrollOffset) { // topmost position, scroll down
+            mScrollOffset = mSelIdx = mScrollOffset-1;
+            render();
+        } else {
+            drawSelection();
+            mSelIdx--;
+            drawSelection();
+        }
+        lcd.updateScreen();
+    }
+    void onButtonDown()
+    {
+        if (mSelIdx >= items.size()-1) {
+            return;
+        }
+        if (screenSelPos() >= mMaxItems-1) { // topmost position, scroll down
+            mScrollOffset++;
+            mSelIdx++;
+            render();
+        } else {
+            drawSelection();
+            mSelIdx++;
+            drawSelection();
+        }
+        lcd.updateScreen();
     }
     void render()
     {
         xassert(lcd.hasFont());
-        mMaxItems = (mHeight - 5) / (lcd.font().height + 1) - 1;
+        mFontHeight = lcd.font().height;
+        mMaxItems = (mHeight - mTop - mFontHeight - 5) / (mFontHeight + 1);
+        printf("maxItems = %d\n", mMaxItems);
         lcd.clear();
         auto y = mTop;
+        /*
+         *      [ Title ]
+         * 2 px space
+         * -----------------
+         * 2 px space
+         * 1-st menu item
+         */
         lcd.putsCentered(y, text);
         y += lcd.font().height + 2;
         lcd.hLine(0, lcd.width()-1, y);
-        y += 3;
+        y += 2;
         uint8_t endItem = mScrollOffset + mMaxItems;
         if (items.size() < endItem) {
             endItem = items.size();
         }
-        for (uint8_t i = mScrollOffset; i < endItem; i++) {
+        for (int8_t i = mScrollOffset; i < endItem; i++) {
             lcd.gotoXY(0, y);
             auto item = items[i];
             if (!item) {
@@ -278,6 +327,23 @@ struct MenuSystem: public Menu
             }
             y += lcd.font().height + 1;
         }
+        drawSelection();
+    }
+    void drawSelection()
+    {
+        int16_t screenIdx;
+        if (mSelIdx < 0) {
+            mSelIdx = mScrollOffset;
+        } else {
+            screenIdx = mSelIdx - mScrollOffset;
+            if (screenIdx < 0) {
+                mSelIdx = mScrollOffset;
+            } else if (screenIdx > mMaxItems) {
+                mSelIdx = mScrollOffset + mMaxItems - 1;
+            }
+        }
+        int16_t top = mTop + mFontHeight + 3 + (screenIdx * (mFontHeight+1));
+        lcd.invertRect(0, top, lcd.width(), mFontHeight + 2);
     }
 };
 }

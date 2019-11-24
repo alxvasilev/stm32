@@ -14,7 +14,10 @@
             tprintf("assert(%)\n", expr);
         }
         tprintf("at %:%\n========\n", file, line);
-#ifndef STM32PP_NOT_EMBEDDED
+
+#ifdef STM32PP_NOT_EMBEDDED
+        abort();
+#else
         for(;;) asm ("wfi");
 #endif
     }
