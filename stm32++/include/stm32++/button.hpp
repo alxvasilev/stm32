@@ -23,10 +23,10 @@ namespace btn
 /** @brief Button event type */
 enum: uint8_t
 {
-    kEventRelease=0, //< Button up
-    kEventPress=1,   //< Button down
-    kEventHold = 2,  //< Button held
-    kEventRepeat = 3 //< Button repeat, generated when the button is held pressed
+    kEventRelease = 0, //< Button up
+    kEventPress = 1,   //< Button down
+    kEventHold = 2,    //< Button held
+    kEventRepeat = 3   //< Button repeat, generated when the button is held pressed
 };
 /** @brief Option flags. They apply to all pins that the Button
  *  class manages (the APins mask)
@@ -288,7 +288,7 @@ public:
     static uint32_t ms10ElapsedSince(uint32_t sinceTicks)
     {
         auto now = Self::now();
-        if (now > sinceTicks)
+        if (now >= sinceTicks)
         {
             return (now - sinceTicks) / (rcc_ahb_frequency / 100);
         }
