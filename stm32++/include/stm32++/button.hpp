@@ -5,21 +5,21 @@
 #ifndef BUTTON_HPP_INCLUDED
 #define BUTTON_HPP_INCLUDED
 
-#include <libopencm3/stm32/rcc.h>
-#include <libopencm3/stm32/gpio.h>
-#include <libopencm3/stm32/exti.h>
-#include <libopencm3/cm3/nvic.h>
-#include <libopencm3/cm3/systick.h>
+#ifndef STM32PP_NOT_EMBEDDED
+  #include <libopencm3/stm32/rcc.h>
+  #include <libopencm3/stm32/gpio.h>
+  #include <libopencm3/stm32/exti.h>
+  #include <libopencm3/cm3/nvic.h>
+  #include <libopencm3/cm3/systick.h>
 
-#include <stm32++/snprint.hpp>
-#include <stm32++/timeutl.hpp>
+  #include <stm32++/timeutl.hpp>
+#endif
+
 #include <stm32++/utils.hpp>
+#include <stm32++/tprintf.hpp>
 
 namespace btn
 {
-template <uint32_t Port>
-rcc_periph_clken getPortClock();
-
 /** @brief Button event type */
 enum: uint8_t
 {
@@ -52,6 +52,8 @@ enum: uint8_t
  */
 typedef void(*EventCb)(uint16_t btn, uint8_t event, void* userp);
 
+class HwDriver;
+
 /** @brief Button handler class
  * There is one methods that has to be called periodically on the
  * Buttons object - \c poll(). It polls the state of the pins,
@@ -73,7 +75,7 @@ typedef void(*EventCb)(uint16_t btn, uint8_t event, void* userp);
  * stable.
 */
 template <uint32_t APort, uint16_t APins, uint16_t ARpt, uint8_t AFlags=0,
-          uint8_t APollIrqN=127, uint8_t ADebounceDly=10>
+          uint8_t APollIrqN=127, uint8_t ADebounceDly=10, class Driver=HwDriver>
 class Buttons
 {
 public:
@@ -105,41 +107,24 @@ protected:
         uint8_t mRepeatCnt;
     };
     RepeatState mRptStates[kRptCount];
-    uint32_t ms10ElapsedSince(uint32_t sinceTicks, uint32_t now) // must be called at leat once per ~40 seconds in case of cpu frequency <= 100 MHz
-    {
-        if (now > sinceTicks)
-        {
-            return (now - sinceTicks) / (rcc_ahb_frequency / 100);
-        }
-        else // DwtCounter wrap
-        {
-            return (((uint64_t)now + 0xffffffff) - sinceTicks) / (rcc_ahb_frequency / 1000);
-        }
-    }
 public:
     Buttons() {}
     void init(EventCb aCb, void* aUserp)
     {
-        mLastObtainedTs = DwtCounter::get();
+        mLastObtainedTs = Driver::now();
         mHandler = aCb;
         mHandlerUserp = aUserp;
     //===
         static_assert((RepeatPins & ~Pins) == 0, "RepeatPins specifies pins that are not in Pins");
         if ((Flags & kOptNoInternalPuPd) == 0)
         {
-            gpio_set_mode(Port, GPIO_MODE_INPUT,
-                      GPIO_CNF_INPUT_PULL_UPDOWN, Pins);
-            if (Flags & kOptActiveLow)
-                gpio_set(Port, Pins); //pull-up
-            else
-                gpio_clear(Port, Pins); //pull-down
+            Driver::gpioSetPuPdInput(Port, Pins, Flags & kOptActiveLow);
         }
         else
         {
-            gpio_set_mode(Port, GPIO_MODE_INPUT,
-                      GPIO_CNF_INPUT_FLOAT, Pins);
+            Driver::gpioSetFloatInput(Port, Pins);
         }
-        mState = GPIO_IDR(Port);
+        mState = Driver::gpioRead(Port);
         mLastPollState = mState;
     }
     /** @brief Polls the state of the button pins and queues events
@@ -150,18 +135,18 @@ public:
     {
         // may be called from an ISR
         // scan pins and detect changes
-        uint16_t newState = GPIO_IDR(Port);
+        uint16_t newState = Driver::gpioRead(Port);
         uint16_t changedPins = (mLastPollState ^ newState) & Pins;
         mLastPollState = newState;
 
         if (changedPins)
         {
-            mDebounceStartTs = DwtCounter::get(); //reset debounce timer
+            mDebounceStartTs = Driver::now(); //reset debounce timer
             mDebouncing |= changedPins; //add pins to the ones currently debounced
         }
         //check for end of debounce period
         if (mDebouncing
-        && (DwtCounter::ticksToMs(DwtCounter::get() - mDebounceStartTs) >= DebounceMs))
+        && (Driver::ticksToMs(Driver::now() - mDebounceStartTs) >= DebounceMs))
         {
             // debounce ended, read pins
             if (Flags & kOptActiveLow)
@@ -178,21 +163,21 @@ public:
      */
     void process()
     {
-        uint32_t now = DwtCounter::get();
+        uint32_t now = Driver::now();
         // atomically make a snapshot of the current button state and change flags
         bool intsWereEnabled;
         if (APollIrqN != 127)
         {
-            intsWereEnabled = nvic_get_irq_enabled(APollIrqN);
+            intsWereEnabled = Driver::isIrqEnabled(APollIrqN);
             if (intsWereEnabled)
-                nvic_disable_irq(APollIrqN);
+                Driver::disableIrq(APollIrqN);
         }
         uint16_t state = mState;
         uint16_t changed = mChanged;
         mChanged = 0;
         if ((APollIrqN != 127) && intsWereEnabled)
         {
-            nvic_enable_irq(APollIrqN);
+            Driver::enableIrq(APollIrqN);
         }
         for (uint8_t idx=Right0Count<Pins>::value; idx < HighestBitIdx<Pins>::value; idx++)
         {
@@ -227,10 +212,12 @@ public:
                     continue;
 
                 auto& rptState = mRptStates[idx-kRptShift];
-                uint32_t ms10 = ms10ElapsedSince(rptState.mLastTs, DwtCounter::get());
+                // must be called at leat once per ~40 seconds in case of cpu frequency <= 100 MHz
+                uint32_t ms10 = Driver::ms10ElapsedSince(rptState.mLastTs);
                 if (ms10 < rptState.mTimeToNextMs10)
+                {
                     continue; //too early for repeat
-
+                }
                 rptState.mLastTs = now;
                 if (rptState.mTimeToNextMs10 == rptState.mRptStartDelayMs10)
                 {
@@ -287,6 +274,55 @@ public:
     /** @brief Sets the user pointer that is passed to the event handler */
     void setHandlerUserp(void* userp) { mHandlerUserp = userp; }
 };
+
+#ifndef STM32PP_NOT_EMBEDDED
+class HwDriver
+{
+protected:
+    typedef HwDriver Self;
+public:
+    static uint32_t now()
+    {
+        return DwtCounter::get();
+    }
+    static uint32_t ms10ElapsedSince(uint32_t sinceTicks)
+    {
+        auto now = Self::now();
+        if (now > sinceTicks)
+        {
+            return (now - sinceTicks) / (rcc_ahb_frequency / 100);
+        }
+        else // DwtCounter wrap
+        {
+            return (((uint64_t)now + 0xffffffff) - sinceTicks) / (rcc_ahb_frequency / 100);
+        }
+    }
+    static uint32_t ticksToMs(uint32_t ticks) { return DwtCounter::ticksToMs(ticks); }
+    static bool isIrqEnabled(uint8_t irqn) { return nvic_get_irq_enabled(irqn); }
+    static void enableIrq(uint8_t irqn) { nvic_enable_irq(irqn); }
+    static void disableIrq(uint8_t irqn) { nvic_disable_irq(irqn); }
+    static void gpioSetPuPdInput(uint32_t port, uint16_t pins, int pullUp)
+    {
+        gpio_set_mode(port, GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN, pins);
+        if (pullUp)
+        {
+            gpio_set(port, pins);
+        }
+        else
+        {
+            gpio_clear(port, pins);
+        }
+    }
+    static void gpioSetFloatInput(uint32_t port, uint16_t pins)
+    {
+        gpio_set_mode(port, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, pins);
+    }
+    static uint16_t gpioRead(uint32_t port)
+    {
+        return GPIO_IDR(port);
+    }
+};
+#endif
 }
 
 /*

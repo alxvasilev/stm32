@@ -1,6 +1,5 @@
 #ifndef UTILS_HPP
 #define UTILS_HPP
-#include <libopencm3/cm3/cortex.h>
 
 template <uint32_t val>
 struct CountOnes { enum: uint8_t { value = (val & 0x01) + CountOnes<(val >> 1)>::value }; };
@@ -21,6 +20,9 @@ struct HighestBitIdx { enum: uint8_t { value = 1 + HighestBitIdx<(val >> 1)>::va
 template<>
 struct HighestBitIdx<0> { enum: uint8_t { value = 0 }; };
 
+#ifndef STM32PP_NOT_EMBEDDED
+#include <libopencm3/cm3/cortex.h>
+
 /** @brief Scoped global disable of interrupts */
 struct IntrDisable
 {
@@ -40,4 +42,5 @@ public:
     }
 };
 
+#endif
 #endif // UTILS_HPP
