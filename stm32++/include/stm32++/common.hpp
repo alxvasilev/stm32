@@ -7,6 +7,7 @@
   @copyright BSD License
 */
 
+#include <stdint.h>
 
 // Define a class to check whether a class has a member
 #define TYPE_SUPPORTS(ClassName, Expr)                                 \
@@ -39,58 +40,5 @@ struct PeriphInfo;
 #else
     #define STM32PP_PERIPH_INFO(periphId) __STM32PP_PERIPH_INFO(periphId);
 #endif
-
-template <uint32_t Port, uint16_t Pin>
-struct PinDesc
-{
-    enum: uint32_t { kPort = Port };
-    enum: uint16_t { kPin = Pin };
-    static const auto kClockId = PeriphInfo<kPort>::kClockId;
-    static void enableClock() { ::rcc_periph_clock_enable(kClockId); }
-    template <typename T>
-    static void setMode(T mode, T config)
-    {
-        gpio_set_mode(kPort, mode, config, kPin);
-    }
-    template <typename T>
-
-    static void enableClockAndSetMode(T mode, T config)
-    {
-        enableClock();
-        setMode(mode, config);
-    }
-    static void set() { gpio_set(kPort, kPin); }
-    static void clear() { gpio_clear(kPort, kPin); }
-    static void toggle() { gpio_toggle(kPort, kPin); }
-    static uint16_t get() { return GPIO_IDR(kPort) & kPin; }
-};
-
-STM32PP_PERIPH_INFO(GPIOA)
-    static constexpr rcc_periph_clken kClockId = RCC_GPIOA;
-};
-
-STM32PP_PERIPH_INFO(GPIOB)
-    static constexpr rcc_periph_clken kClockId = RCC_GPIOB;
-};
-
-STM32PP_PERIPH_INFO(GPIOC)
-    static constexpr rcc_periph_clken kClockId = RCC_GPIOC;
-};
-
-STM32PP_PERIPH_INFO(GPIOD)
-    static constexpr rcc_periph_clken kClockId = RCC_GPIOD;
-};
-
-STM32PP_PERIPH_INFO(GPIOE)
-    static constexpr rcc_periph_clken kClockId = RCC_GPIOE;
-};
-
-STM32PP_PERIPH_INFO(GPIOF)
-    static constexpr rcc_periph_clken kClockId = RCC_GPIOF;
-};
-
-STM32PP_PERIPH_INFO(GPIOG)
-    static constexpr rcc_periph_clken kClockId = RCC_GPIOG;
-};
 
 #endif // COMMON_HPP
