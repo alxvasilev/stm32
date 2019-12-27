@@ -6,6 +6,7 @@
 #ifndef _TOSTRING_H
 #define _TOSTRING_H
 #include <type_traits>
+#include <limits>
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -404,6 +405,19 @@ toString(char* buf, size_t bufsize, Val val, uint8_t minDigits=0)
             return nullptr;
         }
     }
+    if (std::numeric_limits<Val>::has_infinity && (val == std::numeric_limits<Val>::infinity()))
+    {
+        *(buf++) = 'i';
+        *(buf++) = 'n';
+        *(buf++) = 'f';
+        if (!(flags & kDontNullTerminate))
+        {
+            *buf = 0;
+        }
+        return buf;
+    }
+
+
     size_t whole = (size_t)(val);
 
     // value to multiply the fractional part so that it becomes an int
