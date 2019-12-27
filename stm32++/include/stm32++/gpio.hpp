@@ -22,7 +22,7 @@ struct Pin
     static const auto kClockId = PeriphInfo<kPort>::kClockId;
     static void enableClock() { ::rcc_periph_clock_enable(kClockId); }
 
-    template <typename M, typename C, bool StartClock=true>
+    template <bool StartClock=true, typename M, typename C>
     static void setMode(M mode, C config)
     {
         if (StartClock) {

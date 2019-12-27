@@ -30,12 +30,16 @@ public:
     { return ticks / (rcc_ahb_frequency/1000); }
 
     template <class W=uint32_t>
+    static W ticksTo10Ms(W ticks)
+    { return ticks / (rcc_ahb_frequency/100); }
+
+    template <class W=uint32_t>
     static W ticksTo100Ms(W ticks)
     { return ticks / (rcc_ahb_frequency/10); }
 
     template <class W=uint32_t>
-    static W ticksTo10Ms(W ticks)
-    { return ticks / (rcc_ahb_frequency/100); }
+    static W ticksToSec(W ticks)
+    { return ticks / rcc_ahb_frequency; }
 
     template <uint32_t Div, int32_t Corr>
     static volatile void delay(uint32_t t) // not accurate below ~400ns
