@@ -1,46 +1,49 @@
 <html>
 <head>
 <style>
-
-.glyph {
-    display: inline-block;
-    float: left;
-    vertical-align: top;
+body {
+    margin: 2px;
+    height: 99%;
 }
 #main {
-    display: flex;
-    flex-flow: row;
-}
-#menu {
-    display: flex;
-    flex-flow: row;
-    border-bottom: 1px solid #eeeeee;
-    flex: 0 0 40px;
-}
-#pageDiv {
-    display: flex;
-    flex-flow: column;
     height: 100%;
-    user-select: none;
-    cursor: default;
+    margin: 0px;
+}
+.hide {
+    visibility: hidden;
+}
+#loadGui {
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    width: 100%;
+}
+.glyph {
+    display: inline-block;
+    vertical-align: top;
+}
+
+#menu {
+    border-bottom: 1px solid #eeeeee;
 }
 #editorGroup {
-    flex: 0 0 auto;
-    display: flex;
-    flex-flow: column;
     border-right: 1px solid #eeeeee;
 }
-#editor {
-   flex: 0 0 auto;
+#editorGui {
    border-bottom: 1px solid #eeeeee;
    border-left: 1px solid #eeeeee;
 }
+#editor {
+    display: inline-block;
+    text-align: center;
+    border: 1px solid #eeeeee;
+}
 #typingArea {
-    flex: 0 0 auto;
     border: 0px;
     border-bottom: 1px solid #eeeeee;
     background-color: #f0f0f0;
     height: 80px;
+    width: 100%;
 }
 #lcd {
  height: 128px;
@@ -50,12 +53,9 @@
 }
 
 #glyphs {
-    flex: 1 1 auto;
-    display: flex;
-    flex-flow: row;
-    flex-wrap: wrap;
-    align-self: stretch;
-    overflow: auto;
+    display: block;
+    overflow-y: scroll;
+    height: 100%;
 }
 #spacer {
     flex: 0 0 10px;
@@ -132,7 +132,49 @@
 }
 </style>
 </head>
-<body id=page>
+<body>
+  <div id=editorGui class="hide">
+    <table id=main><tr>
+        <td id=editorGroup>
+            <table style=height:100%>
+                <tr><td style="text-align: center">
+                    <div id=editor></div>
+                </td></tr>
+                <tr><td>
+                    <div style=text-align:center>LCD preview:</div>
+                    <div id=lcd></div>
+                    <textarea id=typingArea></textarea>
+                </td></tr>
+            </table>
+        </td>
+        <td>
+            <div id= glyphs></div>
+        </td>
+    </tr></table>
+  </div>
+  <div id=loadGui>
+      <div class=openCaption>Load font:</div>
+      <table width=100%>
+        <tr>
+          <td style='width:33%'>
+            <label class=openBtn>
+                <span>C srcfile...</span>
+                <input type=file class=file-input onchange='loadLocalFile(event, parseFontCSource);' />
+            </label>
+          </td>
+          <td style='width:33%'>
+            <label class=openBtn>
+              <span>BDF file...</span>
+              <input type=file class=file-input onchange='loadLocalFile(event, parseFontBdf);' />
+            </label></td>
+          <td style='width:33%'>
+            <div class=openBtn onclick='fontSelectGui();'>Capture</div>
+          </td>
+        </tr>
+        <tr>
+            <td><div id=captureOptions class=openOptions></div></td>
+        </tr>
+  </table>
 </body>
 
 <script language=javascript>
@@ -145,6 +187,8 @@ var gConfig = {
     spaceWidth: 1,
     targetFontHeight: 10
 }
+var loadGui = document.getElementById("loadGui");
+var editorGui = document.getElementById("editorGui");
 
 function loadConfig() {
     for (var k in gConfig) {
@@ -342,26 +386,25 @@ class GlyphView {
         }
     }
     createGui() {
-        var self = this;
-        var view = self.widget;
-        self.setPixelSpacing(this.opts.pixSpacing);
-        var rows = self.model.rows;
+        var view = this.widget;
+        this.setPixelSpacing(this.opts.pixSpacing);
+        var rows = this.model.rows;
         var rowCnt = rows.length;
         var colCnt = rows[0].length;
         var palette = this.opts.palette ? this.opts.palette : null;
         for (var y = 0; y < rowCnt; y++) {
             var row = view.insertRow(-1);
-            row.style.height = self.psize;
+            row.style.height = this.psize;
             var rowData = rows[y];
             for (var x = 0; x < colCnt; x++) {
                 var cell = row.insertCell(-1);
                 var cellData = rowData[x];
                 var style = cell.style;
-                style.width = self.psize;
+                style.width = this.psize;
                 if (palette) {
                     style.backgroundColor = palette[cellData];
                 } else {
-                    style.backgroundColor = cellData ? self.fg : self.bg;
+                    style.backgroundColor = cellData ? this.fg : this.bg;
                 }
                 style.padding = 0;
                 var border = this.opts.border;
@@ -375,25 +418,25 @@ class GlyphView {
                 cell.x = x;
                 cell.y = y;
                 if (this.opts.active) {
-                    cell.onclick = function(event) {
+                    cell.onclick = (event) => {
                         var c = event.target;
-                        var old = self.model.flip(c.x, c.y);
+                        var old = this.model.flip(c.x, c.y);
                     }
                     cell.ondragstart = function(event) {
                         // store a ref. on the dragged elem
                         gDragged = event.target;
                         // make it half transparent
                     };
-                    cell.ondragover = function(event) {
+                    cell.ondragover = (event) => {
                         if (!gDragged)
                         return;
-                        var val = (gDragged.style.backgroundColor === self.bg) ? 0 : 1;
+                        var val = (gDragged.style.backgroundColor === this.bg) ? 0 : 1;
                         var target = event.target;
-                        var old = self.model.set(target.x, target.y, val);
+                        var old = this.model.set(target.x, target.y, val);
                     }
 
-                    cell.oncontextmenu = function(event) {
-                        self.ctxMenu(event);
+                    cell.oncontextmenu = (event) => {
+                        this.ctxMenu(event);
                     }
                 }
             }
@@ -519,58 +562,17 @@ class GlyphView {
 }
 var lcdLetters = [];
 var gEditor = null;
-var editorHtml =
-"<div id=pageDiv>\
-   <div id=menu>menu</div>\
-   <div id=main>\
-     <div id=editorGroup>\
-       <div id=editor></div>\
-       <div align=center>LCD preview:</div>\
-       <div style='position:relative'>\
-       <div id=lcd></div>\
-       </div>\
-       <textarea id=typingArea></textarea>\
-     </div>\
-   <div id= spacer></div>\
-   <div id= glyphs></div>\
- </div>\
-</div>";
-
-var loadGui =
-"<div id=pageDiv>\
-  <div class=openCaption>Load font:</div>\
-  <div style='flex: 0 0 10%'> </div>\
-  <table width=100%>\
-    <tr>\
-      <td style='width:33%'>\
-        <label class=openBtn>\
-          <span style=''>C srcfile...</span>\
-          <input type=file class=file-input onchange='loadLocalFile(event, parseFontCSource);' />\
-        </label></td>\
-        <td style='width:33%'>\
-        <label class=openBtn>\
-          <span style=''>BDF file...</span>\
-          <input type=file class=file-input onchange='loadLocalFile(event, parseFontBdf);' />\
-        </label></td>\
-      <td style='width:33%'>\
-        <div class=openBtn onclick='fontSelectGui();'>Capture</div>\
-      </td>\
-    </tr>\
-    <tr>\
-      <td><div></div>\
-      <td><div id=captureOptions class=openOptions></div>\
-    </tr>\
-  </table>";
 
 function loadEditor(models) {
-    document.getElementById('page').innerHTML = editorHtml;
+    loadGui.classList.add("hide");
+    editorGui.classList.remove("hide");
     glyphCont = document.getElementById('glyphs');
     var glyphCount = models.length;
     var editorCont = document.getElementById('editor');
 
     for (var i = 0; i < glyphCount; i++) {
         var model = models[i];
-        var view = new GlyphView(model, 8, {active: false, bg: 'rgba(255,255,255,0)'});
+        var view = new GlyphView(model, 4, {active: false, bg: 'rgba(255,255,255,0)'});
         var widget = view.widget;
         widget.model = model; //make the model accessible from the onclick handler
         widget.className = 'glyph';
@@ -579,7 +581,7 @@ function loadEditor(models) {
             gEditor.changeModel(event.currentTarget.model);
         };
     }
-    gEditor = new GlyphView(models[0], 16, {active: true});
+    gEditor = new GlyphView(models[0], 10, {active: true});
     gEditor.widget.setAttribute('id', 'glyphEditor');
     document.addEventListener("keydown", function(event) {
         if (event.keyCode == 90 && event.ctrlKey) {
@@ -608,10 +610,6 @@ function loadEditor(models) {
            return;
        }
    }
-}
-
-function fontOpenGui() {
-    document.getElementById("page").innerHTML = loadGui;
 }
 
 var standardFonts = ['arial', 'serif', 'sans-serif', 'monospace', 'Monaco, Lucida Console, monospace'];
@@ -1039,7 +1037,6 @@ font-family: "Kimberley", sans-serif;
 */
 window.onload = function() {
     loadConfig();
-    fontOpenGui(); //loadEditor();
 }
 </script>
 </html>
