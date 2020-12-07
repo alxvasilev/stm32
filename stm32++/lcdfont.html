@@ -85,7 +85,10 @@
     flex-flow: column;
     justify-content: space-around;
 }
-
+.file-input {
+    visibility:hidden;
+    width: 100px;
+}
 .openBtn {
     flex: 0 0 auto;
     flex-flow: row;
@@ -324,199 +327,196 @@ gmProto.migrateListeners = function(newModel)
 
 var gDragged = null;
 var gCtxMenu = null;
-function GlyphView(model, psize, opts)
-{
-    this.model = model;
-    this.psize = psize;
-    this.opts = opts;
-    this.fg = opts.fg || kColorFg;
-    this.bg = opts.bg || kColorBg;
-    this.widget = document.createElement('table');
-    this.createGui();
-    model.addListener(this);
-    if (!opts.active) {
-        this.updateToolTip();
+class GlyphView {
+    constructor(model, psize, opts) {
+        this.model = model;
+        this.psize = psize;
+        this.opts = opts;
+        this.fg = opts.fg || kColorFg;
+        this.bg = opts.bg || kColorBg;
+        this.widget = document.createElement('table');
+        this.createGui();
+        model.addListener(this);
+        if (!opts.active) {
+            this.updateToolTip();
+        }
     }
-}
-var gvProto = GlyphView.prototype;
-gvProto.createGui = function() {
-    var self = this;
-    var view = self.widget;
-    self.setPixelSpacing(this.opts.pixSpacing);
-    var rows = self.model.rows;
-    var rowCnt = rows.length;
-    var colCnt = rows[0].length;
-    var palette = this.opts.palette ? this.opts.palette : null;
-    for (var y = 0; y < rowCnt; y++) {
-        var row = view.insertRow(-1);
-        row.style.height = self.psize;
-        var rowData = rows[y];
-        for (var x = 0; x < colCnt; x++) {
-            var cell = row.insertCell(-1);
-            var cellData = rowData[x];
-            var style = cell.style;
-            style.width = self.psize;
-            if (palette) {
-                style.backgroundColor = palette[cellData];
-            } else {
-                style.backgroundColor = cellData ? self.fg : self.bg;
-            }
-            style.padding = 0;
-            var border = this.opts.border;
-            if (border === true) {
-                style.border = '1px solid #eeeeee';
-            } else if (border) {
-                style.border = border;
-            } else {
-                style.border = '0px';
-            }
-            cell.x = x;
-            cell.y = y;
-            if (this.opts.active) {
-                cell.onclick = function(event) {
-                    var c = event.target;
-                    var old = self.model.flip(c.x, c.y);
+    createGui() {
+        var self = this;
+        var view = self.widget;
+        self.setPixelSpacing(this.opts.pixSpacing);
+        var rows = self.model.rows;
+        var rowCnt = rows.length;
+        var colCnt = rows[0].length;
+        var palette = this.opts.palette ? this.opts.palette : null;
+        for (var y = 0; y < rowCnt; y++) {
+            var row = view.insertRow(-1);
+            row.style.height = self.psize;
+            var rowData = rows[y];
+            for (var x = 0; x < colCnt; x++) {
+                var cell = row.insertCell(-1);
+                var cellData = rowData[x];
+                var style = cell.style;
+                style.width = self.psize;
+                if (palette) {
+                    style.backgroundColor = palette[cellData];
+                } else {
+                    style.backgroundColor = cellData ? self.fg : self.bg;
                 }
-                cell.ondragstart = function(event) {
-                    // store a ref. on the dragged elem
-                    gDragged = event.target;
-                    // make it half transparent
-                };
-                cell.ondragover = function(event) {
-                    if (!gDragged)
+                style.padding = 0;
+                var border = this.opts.border;
+                if (border === true) {
+                    style.border = '1px solid #eeeeee';
+                } else if (border) {
+                    style.border = border;
+                } else {
+                    style.border = '0px';
+                }
+                cell.x = x;
+                cell.y = y;
+                if (this.opts.active) {
+                    cell.onclick = function(event) {
+                        var c = event.target;
+                        var old = self.model.flip(c.x, c.y);
+                    }
+                    cell.ondragstart = function(event) {
+                        // store a ref. on the dragged elem
+                        gDragged = event.target;
+                        // make it half transparent
+                    };
+                    cell.ondragover = function(event) {
+                        if (!gDragged)
                         return;
-                    var val = (gDragged.style.backgroundColor === self.bg) ? 0 : 1;
-                    var target = event.target;
-                    var old = self.model.set(target.x, target.y, val);
-                }
+                        var val = (gDragged.style.backgroundColor === self.bg) ? 0 : 1;
+                        var target = event.target;
+                        var old = self.model.set(target.x, target.y, val);
+                    }
 
-                cell.oncontextmenu = function(event) {
-                    self.ctxMenu(event);
+                    cell.oncontextmenu = function(event) {
+                        self.ctxMenu(event);
+                    }
                 }
             }
         }
     }
-}
-gvProto.ctxMenu = function(event) {
-    if (gCtxMenu) {
-        return;
-    }
-    var self = this;
-    var cell = event.target;
-    event.preventDefault();
-    var m = gCtxMenu = document.createElement('div');
-    gCtxMenu.className = 'ctxMenu';
-    gCtxMenu.style.top = event.pageY + "px";
-    gCtxMenu.style.left = event.pageX + "px";
-    var html = '<table>';
-    if (!gMonospaceFont) {
-        html+=
-           '<tr><td id=ctxDelCol>Delete column</td></tr>\
+    ctxMenu(event) {
+        if (gCtxMenu) {
+            return;
+        }
+        var self = this;
+        var cell = event.target;
+        event.preventDefault();
+        var m = gCtxMenu = document.createElement('div');
+        gCtxMenu.className = 'ctxMenu';
+        gCtxMenu.style.top = event.pageY + "px";
+        gCtxMenu.style.left = event.pageX + "px";
+        var html = '<table>';
+        if (!gMonospaceFont) {
+            html+=
+            '<tr><td id=ctxDelCol>Delete column</td></tr>\
             <tr><td id=ctxInsertColLeft>Insert Column on Left</td></tr>\
             <tr><td id=ctxInsertColRight>Insert Column on Right</td></tr>';
-    }
-    html+=
+        }
+        html+=
         '<tr><td id=ctxClearGlyph>Clear glyph</td></tr>\
         </table>';
-    m.innerHTML = html;
+        m.innerHTML = html;
 
-    m.querySelector("#ctxClearGlyph").onclick = function(event) {
-        self.clear();
-    };
+        m.querySelector("#ctxClearGlyph").onclick = function(event) {
+            self.clear();
+        };
 
-    if (!gMonospaceFont) {
-        m.querySelector("#ctxDelCol").onclick = function(event) {
-            if (self.model.width <= 1)
+        if (!gMonospaceFont) {
+            m.querySelector("#ctxDelCol").onclick = function(event) {
+                if (self.model.width <= 1)
                 return;
-            self.model.deleteColumn(cell.x);
-        };
-        m.querySelector("#ctxInsertColLeft").onclick = function(event) {
-            self.model.insertColumn(cell.x);
-        };
-        m.querySelector("#ctxInsertColRight").onclick = function(event) {
-            self.model.insertColumn(cell.x+1);
-        };
-    }
-    document.body.appendChild(gCtxMenu);
-    var clickHandler = function(event) {
-        document.removeEventListener("click", clickHandler);
-        if (event.target.className && event.target.className === 'ctxMenu') {
-            alert("menu clicked");
+                self.model.deleteColumn(cell.x);
+            };
+            m.querySelector("#ctxInsertColLeft").onclick = function(event) {
+                self.model.insertColumn(cell.x);
+            };
+            m.querySelector("#ctxInsertColRight").onclick = function(event) {
+                self.model.insertColumn(cell.x+1);
+            };
         }
-        document.body.removeChild(gCtxMenu);
-        gCtxMenu = null;
-    };
-    document.addEventListener("click", clickHandler);
-}
+        document.body.appendChild(gCtxMenu);
+        var clickHandler = function(event) {
+            document.removeEventListener("click", clickHandler);
+            if (event.target.className && event.target.className === 'ctxMenu') {
+                alert("menu clicked");
+            }
+            document.body.removeChild(gCtxMenu);
+            gCtxMenu = null;
+        };
+        document.addEventListener("click", clickHandler);
+    }
 
-gvProto.updateToolTip = function()
-{
-    var model = this.model;
-    this.widget.setAttribute('title',
-        "Char: '"+this.model.char+"'\ncode: "+model.char.charCodeAt(0)+
+    updateToolTip() {
+        var model = this.model;
+        this.widget.setAttribute('title',
+        "Char: '" + String.fromCharCode(model.char) + "'\ncode: " + model.char +
         '\nwidth: '+model.width+"\nheight: "+model.height);
-}
-
-gvProto.onPixelChanged = function(x,y,val) {
-    var row = this.widget.rows[y];
-    row.cells[x].style.backgroundColor = val ? this.fg : this.bg;
-}
-gvProto.onDimensionsChanged = function() {
-    this.widget.innerHTML = '';
-    this.createGui();
-    this.updateToolTip();
-}
-gvProto.onModelUpdated = function() {
-    this.widget.innerHTML = '';
-    this.createGui();
-}
-gvProto.changeModel = function(model) {
-    if (model === this.model) {
-        return;
     }
-    this.model.removeListener(this);
-    model.addListener(this);
-    this.model = model;
 
-    var h = this.widget.rows.length;
-    var w = this.widget.rows[0].cells.length;
-    if (h !== model.height || w !== model.width) {
-        this.onDimensionsChanged();
-    } else {
-        this.onModelUpdated();
+    onPixelChanged(x,y,val) {
+        var row = this.widget.rows[y];
+        row.cells[x].style.backgroundColor = val ? this.fg : this.bg;
+    }
+    onDimensionsChanged() {
+        this.widget.innerHTML = '';
+        this.createGui();
+        this.updateToolTip();
+    }
+    onModelUpdated() {
+        this.widget.innerHTML = '';
+        this.createGui();
+    }
+    changeModel(model) {
+        if (model === this.model) {
+            return;
+        }
+        this.model.removeListener(this);
+        model.addListener(this);
+        this.model = model;
+
+        var h = this.widget.rows.length;
+        var w = this.widget.rows[0].cells.length;
+        if (h !== model.height || w !== model.width) {
+            this.onDimensionsChanged();
+        } else {
+            this.onModelUpdated();
+        }
+    }
+
+    setPixelSpacing(n) {
+        if (n === undefined) {
+            n = 0;
+        }
+        this.widget.style.borderSpacing = n+'px';
+    }
+
+    undo() {
+        if (!this._undoBuf || this._undoBuf.length < 1) {
+            console.log("No more undo history");
+            return false;
+        }
+        var op = this._undoBuf.pop();
+        switch(op[0]) {
+            case UndoOp.kSetPixel: //pixel change
+                this.set(op[1], op[2], op[3], true);
+                break;
+            case UndoOp.kDeleteCol:
+                this.deleteColumn(op[1], true);
+                break;
+            case UndoOp.kInsertCol:
+                this.insertColumn(op[1], op[2]);
+                break;
+            default:
+                throw new Error("Unknown undo operation");
+        }
+        return true;
     }
 }
-
-gvProto.setPixelSpacing = function(n) {
-    if (n === undefined) {
-        n = 0;
-    }
-    this.widget.style.borderSpacing = n+'px';
-}
-
-gmProto.undo = function() {
-    if (!this._undoBuf || this._undoBuf.length < 1) {
-        console.log("No more undo history");
-        return false;
-    }
-    var op = this._undoBuf.pop();
-    switch(op[0])
-    {
-        case UndoOp.kSetPixel: //pixel change
-            this.set(op[1], op[2], op[3], true);
-            break;
-        case UndoOp.kDeleteCol:
-            this.deleteColumn(op[1], true);
-            break;
-        case UndoOp.kInsertCol:
-            this.insertColumn(op[1], op[2]);
-            break;
-        default:
-            throw new Error("Unknown undo operation");
-    }
-    return true;
-}
-
 var lcdLetters = [];
 var gEditor = null;
 var editorHtml =
@@ -542,12 +542,17 @@ var loadGui =
   <div style='flex: 0 0 10%'> </div>\
   <table width=100%>\
     <tr>\
-      <td style='width:50%'>\
+      <td style='width:33%'>\
         <label class=openBtn>\
-          <span style=''>Local file...</span>\
-          <input type=file style='visibility:hidden;' onchange='loadLocalFile(event);' />\
+          <span style=''>C srcfile...</span>\
+          <input type=file class=file-input onchange='loadLocalFile(event, parseFontCSource);' />\
         </label></td>\
-      <td style='width:50%'>\
+        <td style='width:33%'>\
+        <label class=openBtn>\
+          <span style=''>BDF file...</span>\
+          <input type=file class=file-input onchange='loadLocalFile(event, parseFontBdf);' />\
+        </label></td>\
+      <td style='width:33%'>\
         <div class=openBtn onclick='fontSelectGui();'>Capture</div>\
       </td>\
     </tr>\
@@ -666,7 +671,7 @@ function loadRemoteFont() {
     captureFont(remoteFontUrl);
 }
 
-function loadLocalFile(event)
+function loadLocalFile(event, parseFunc)
 {
   var file = event.target.files[0];
   if (!file) {
@@ -674,10 +679,21 @@ function loadLocalFile(event)
   }
   var reader = new FileReader();
   reader.onload = function(e) {
-    parseFontCSource(e.target.result);
+    let models = parseFunc(e.target.result);
+    if (typeof models === "string") {
+        alert("Error parsing file: " + models);
+        return;
+    }
+    loadEditor(models);
   };
   reader.readAsText(file);
 }
+
+function parseFontBdf(contents) {
+    let parser = new BdfFontParser;
+    return parser.parse(contents);
+}
+
 function parseFontCSource(contents)
 {
     var m = contents.match(/Font\s+?[^\s]+?\(\d+\s*?,\s*?(\d+)\s*,/m);
@@ -701,24 +717,12 @@ function parseFontCSource(contents)
         var bytes = line.match(/(0x[0-9a-fA-F]+)/g);
         models.push(loadModelFromSourceLine(line, width, fontHeight));
     }
-    loadEditor(models);
+    return models;
 }
 
 function loadModelFromSourceLineHScan(line, lineNo, bytes, fontHeight) {
     var width = bytes.length;
-    var model = new GlyphModel(fontHeight, width, String.fromCharCode(lineNo+32));
-
-    for (var col = 0; col < width; col++) {
-        var byte = parseInt(bytes[col]);
-        for (var i = 0; i < fontHeight; i++, byte >>= 1) {
-            var row = model.rows[col];
-            row[i] = (byte & 1) ? true : false;
-        }
-    }
-}
-function loadModelFromSourceLineHScan(line, lineNo, bytes, fontHeight) {
-    var width = bytes.length;
-    var model = new GlyphModel(width, fontHeight, String.fromCharCode(lineNo+32));
+    var model = new GlyphModel(width, fontHeight, lineNo + 32);
 
     for (var col = 0; col < width; col++) {
         var byte = parseInt(bytes[col]);
@@ -817,10 +821,11 @@ capProto.detectFontTop = function()
     this.fontTop = top;
 }
 
-capProto.captureGlyph = function(ch)
+capProto.captureGlyph = function(code)
 {
     assert(this.fontBottom);
     assert(this.fontTop !== undefined);
+    let ch = String.fromCharCode(code);
     var data = this.drawGlyph(ch);
     //scan width
     var l = scanLeftBorder(data);
@@ -926,7 +931,104 @@ function scanBottomBorder(data) {
     }
     return -1;
 }
-
+class BdfFontParser {
+    constructor() {
+    }
+    parse(contents) {
+        let lines = this.lines = contents.split(/[\r\n]/gm);
+        let lineCnt = lines.length;
+        let models = this.models = [];
+        let idx = 0;
+        while (idx < lineCnt) {
+            let m = lines[idx++].match(/FONTBOUNDINGBOX (\d+) (\d+) ([-\d]+) ([-\d]+)/);
+            if (m) {
+                this.fontW = parseInt(m[1]);
+                this.fontH = parseInt(m[2]);
+                this.yNormal = this.fontH + parseInt(m[4]);
+                idx++;
+                break;
+            }
+        }
+        if (this.fontW == null) {
+            return "No FONTBOUNDINGBOX line found";
+        }
+        while (idx < lineCnt) {
+            for(;;) {
+                if (lines[idx].match(/STARTCHAR/)) {
+                    break;
+                }
+                idx++;
+                if (idx >= lineCnt) {
+                    return models;
+                }
+            }
+            let ret = this.parseGlyph(idx);
+            if (typeof ret === "string") { // error message
+                return ret;
+            }
+            idx = ret[1];
+            let model = ret[0];
+            if (!model) { // we are not interested in this char
+                continue;
+            }
+            models.push(model);
+        }
+        return models;
+    }
+    parseGlyph(idx) {
+        var code;
+        var xoffs, yoffs;
+        let lines = this.lines;
+        for (; idx < lines.length; idx++) {
+            let line = lines[idx];
+            let m = line.match(/([A-Z]+)[\s]*(.*)/);
+            if (!m) {
+                return "Cant tokenize line " + line;
+            }
+            let kw = m[1];
+            if (kw === "ENCODING") {
+                code = parseInt(m[2]);
+                if (code < 32 || code > 255) {
+                    return [null, idx+1];
+                }
+            } else if (kw === "BITMAP") {
+                idx++;
+                break;
+            } else if (kw === "BBX") {
+                let values = m[2].split(" ");
+                xoffs = parseInt(values[2]);
+                let h = parseInt(values[1]);
+                yoffs = (this.yNormal - parseInt(values[3])) - h;
+            } else if (kw === "ENDCHAR") {
+                return "No BITMAP section";
+            }
+        }
+        if (code == null) {
+            return "No ENCODING section found";
+        } else if (xoffs == null) {
+            return "No BBX section found";
+        }
+        // parse hex values
+        let model = new GlyphModel(this.fontW, this.fontH, code);
+        while(idx < lines.length) {
+            let line = lines[idx++];
+            if (line.match(/ENDCHAR/)) {
+                return [model, idx];
+            }
+            let row = model.rows[yoffs++];
+            let x = xoffs;
+            for (let hexOfs = 0; hexOfs < line.length; hexOfs += 8) { // process 32 bits at a time
+                let hexChunk = line.substr(hexOfs, Math.min(line.length - hexOfs, 8));
+                let mask = 1 << (hexChunk.length * 4 - 1);
+                let bits = parseInt(hexChunk, 16);
+                for (; mask; x++, mask >>>= 1) {
+                    row[x] = (bits & mask) ? true : false;
+                }
+            }
+        }
+        return "Unexpected end of glyph";
+    }
+}
 /*
 @font-face {
   font-family: "Kimberley";
