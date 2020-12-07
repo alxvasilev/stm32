@@ -13,14 +13,25 @@ struct Font
     :width(aWidth), height(aHeight), count(aCount), widths(aWidths), data((uint8_t*)aData)
     {}
     bool isMono() const { return widths == nullptr; }
-    const uint8_t* getCharData(uint8_t pos) const
+    const uint8_t* getCharData(uint8_t code) const
     {
-        if (!widths)
-            return nullptr;
-        uint32_t ofs = 0;
-        for (int ch = 0; ch < pos; ch++)
-            ofs+=widths[ch];
-        return data+ofs;
+        if (!widths) {
+            if (code < 32) {
+                return nullptr;
+            }
+            code -= 32;
+            if (code >= count) {
+                return nullptr;
+            }
+            uint8_t byteHeight = (height + 7) / 8;
+            return data + (byteHeight * width) * pos;
+        }
+        else {
+            uint32_t ofs = 0;
+            for (int ch = 0; ch < pos; ch++)
+                ofs+=widths[ch];
+            return data+ofs;
+        }
     }
 };
 

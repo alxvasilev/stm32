@@ -663,6 +663,7 @@ function fontSelectGui() {
 var remoteFontUrl = '';
 function loadRemoteFont() {
     remoteFontUrl = prompt("Enter font URL", remoteFontUrl);
+    captureFont(remoteFontUrl);
 }
 
 function loadLocalFile(event)
