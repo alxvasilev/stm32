@@ -117,6 +117,38 @@ body {
    border-bottom: 1px solid #eeeeee;
    border-right: 1px solid #eeeeee;
 }
+.ctx-menu {
+    position: absolute;
+    display: block;
+    opacity: 0;
+    transform-origin: center;
+    z-index: 2;
+    opacity: 0;
+    transform: scale(0);
+    transition: transform 0.2s, opacity 0.2s;
+    border: 1px solid #eeeeee;
+    border-radius: 2px;
+}
+.ctx-menu.show {
+  background-color: #ffffff;
+  opacity: 1;
+  transform: scale(1);
+  transform-origin: top left;
+}
+
+.menu-item {
+    display: block;
+    list-style-type: none;
+    padding: 10px 30px;
+    transition: 0.1s;
+    color: #666;
+    font-size: 0.75em;
+}
+.menu-item:hover {
+  background-color: #eee;
+  cursor: pointer;
+}
+/*
 .ctxMenu {
     position: absolute;
     z-index:1000;
@@ -130,6 +162,7 @@ body {
 .ctxMenu tr:hover {
     background-color: lightblue
 }
+*/
 </style>
 </head>
 <body>
@@ -336,8 +369,7 @@ gmProto.loadFromImgData = function(data) {
         }
     }
 }
-gmProto.clear = function()
-{
+gmProto.clear = function() {
    this.allocate();
    var count = this.listeners.length;
    for (var i=0; i<count; i++) {
@@ -443,55 +475,26 @@ class GlyphView {
         }
     }
     ctxMenu(event) {
-        if (gCtxMenu) {
-            return;
-        }
         var self = this;
-        var cell = event.target;
-        event.preventDefault();
-        var m = gCtxMenu = document.createElement('div');
-        gCtxMenu.className = 'ctxMenu';
-        gCtxMenu.style.top = event.pageY + "px";
-        gCtxMenu.style.left = event.pageX + "px";
-        var html = '<table>';
+        var cell = event.currentTarget;
+        var model = this.model;
+        let m = CtxMenu.create(event);
+        m.addItem("Clear glyph", "ctxClearGlyph", (event) => model.clear());
         if (!gMonospaceFont) {
-            html+=
-            '<tr><td id=ctxDelCol>Delete column</td></tr>\
-            <tr><td id=ctxInsertColLeft>Insert Column on Left</td></tr>\
-            <tr><td id=ctxInsertColRight>Insert Column on Right</td></tr>';
+            m.addItem("Delete column", "ctxDelCol", (event) => {
+                if (model.width <= 1) {
+                    return;
+                }
+                model.deleteColumn(cell.x);
+            });
+            m.addItem("Insert Column on Left", "ctxInsertColLeft", (event) => {
+                model.insertColumn(cell.x);
+            });
+            m.addItem("Insert Column on Right", "ctxInsertColRight", (event) => {
+                model.insertColumn(cell.x+1);
+            });
         }
-        html+=
-        '<tr><td id=ctxClearGlyph>Clear glyph</td></tr>\
-        </table>';
-        m.innerHTML = html;
-
-        m.querySelector("#ctxClearGlyph").onclick = function(event) {
-            self.clear();
-        };
-
-        if (!gMonospaceFont) {
-            m.querySelector("#ctxDelCol").onclick = function(event) {
-                if (self.model.width <= 1)
-                return;
-                self.model.deleteColumn(cell.x);
-            };
-            m.querySelector("#ctxInsertColLeft").onclick = function(event) {
-                self.model.insertColumn(cell.x);
-            };
-            m.querySelector("#ctxInsertColRight").onclick = function(event) {
-                self.model.insertColumn(cell.x+1);
-            };
-        }
-        document.body.appendChild(gCtxMenu);
-        var clickHandler = function(event) {
-            document.removeEventListener("click", clickHandler);
-            if (event.target.className && event.target.className === 'ctxMenu') {
-                alert("menu clicked");
-            }
-            document.body.removeChild(gCtxMenu);
-            gCtxMenu = null;
-        };
-        document.addEventListener("click", clickHandler);
+        m.show();
     }
 
     updateToolTip() {
@@ -611,7 +614,61 @@ function loadEditor(models) {
        }
    }
 }
-
+class CtxMenu {
+    static instance = null;
+    static create(event, html) {
+        if (CtxMenu.instance) {
+            CtxMenu.instance.destroy();
+        }
+        CtxMenu.instance = new CtxMenu(event, html);
+        return CtxMenu.instance;
+    }
+    static show() {
+        if (!CtxMenu.instance) {
+            console.warn("CtxMenu.show: No context menu instance");
+            return;
+        }
+        CtxMenu.instance.show();
+    }
+    static destroy() {
+        if (!CtxMenu.instance) {
+            return;
+        }
+        CtxMenu.instance.destroy();
+        CtxMenu.instance = null;
+    }
+    constructor(event) {
+        event.preventDefault();
+        let w = this.widget = document.createElement("dl");
+        w.classList.add("ctx-menu");
+        w.style.top = event.pageY + "px";
+        w.style.left = event.pageX + "px";
+    }
+    addItem(label, id, handler) {
+        let w = this.widget;
+        let li = document.createElement("li");
+        li.classList.add("menu-item");
+        li.setAttribute("id", id);
+        li.addEventListener("click", handler);
+        li.innerHTML = label;
+        this.widget.appendChild(li);
+    }
+    show() {
+        document.body.appendChild(this.widget);
+        var clickHandler = function(event) {
+            document.removeEventListener("click", clickHandler);
+            if (event.currentTarget === this.widget) {
+                alert("menu clicked");
+            }
+            CtxMenu.destroy();
+        };
+        document.addEventListener("click", clickHandler);
+        setTimeout(()=>this.widget.classList.add("show"), 0); // unfold effect
+    }
+    destroy() {
+        document.body.removeChild(this.widget);
+    }
+}
 var standardFonts = ['arial', 'serif', 'sans-serif', 'monospace', 'Monaco, Lucida Console, monospace'];
 /*
 //Sans serif
