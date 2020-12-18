@@ -3,7 +3,7 @@
 <style>
 body {
     margin: 2px;
-    height: 99%;
+    height: 98%;
 }
 #main {
     height: 100%;
@@ -129,6 +129,7 @@ body {
 </head>
 <body>
     <div id=menu>
+        <label id=menuNewBtn onclick='menuNew(event)'><span>New</span></label>
         <label id=menuLoadBtn onclick='menuLoad(event)'><span>Load</span></label>
         <label id=menuOptionsBtn onclick='menuOptions(event)'><span>Options</span></label>
         <label id=menuSaveBtn class=disabled onclick='menuSave(event)'><span>Save</span><label>
@@ -187,15 +188,15 @@ const UndoOp = Object.freeze({
 });
 
 class GlyphModel {
-    constructor(w, h, charCode) {
+    constructor(w, h, char) {
         this.width = w;
         this.height = h;
-        this.charCode = charCode;
+        this.char = char;
         this.allocate();
         this.listeners = new Array();
     }
-    get char() {
-        return String.fromCharCode(this.charCode);
+    get charCode() {
+        return (this.char.length !== 1) ? -1 : this.char.charCodeAt(0);
     }
     allocate() {
         var h = this.height;
@@ -385,6 +386,34 @@ class GlyphModel {
             }
         }
     }
+    async loadFromImgFile(blob) {
+        let w = this.width;
+        let h = this.height;
+        let bmp = await createImageBitmap(blob);
+        let canv = document.createElement("canvas");
+        canv.setAttribute("width", w);
+        canv.setAttribute("height", h);
+        let ctx = canv.getContext("2d");
+        ctx.scale(w / bmp.width, h / bmp.height);
+        ctx.drawImage(bmp, 0, 0);
+        let data = ctx.getImageData(0, 0, w, h).data;
+        let rows = this.rows;
+        for (let y = 0; y < h; y++) {
+            let row = rows[y];
+            for (let x = 0; x < w; x++) {
+                let base = (y * w + x) * 4;
+                let pixel = Math.min(data[base++], data[base++], data[base++]);
+                if (x < 10) {
+                    console.log(`x=${x}, pixel=${pixel}, alpha=${data[base]}`);
+                }
+                if (pixel < 127 && data[base] > 10) {
+                    row[x] = true;
+                }
+            }
+        }
+        this.notifyListeners("onModelUpdated");
+        document.body.appendChild(canv);
+    }
     clear() {
         this.allocate();
         var count = this.listeners.length;
@@ -393,7 +422,7 @@ class GlyphModel {
         }
     }
     clone() {
-        var result = new GlyphModel(this.width, this.height, this.charCode);
+        var result = new GlyphModel(this.width, this.height, this.char);
         var w = this.width;
         var h = this.height;
         var drows = result.rows;
@@ -469,7 +498,11 @@ class GlyphModel {
         }
         return h;
     }
-
+    notifyListeners(event) {
+        for (let listener of this.listeners) {
+            listener[event].call(listener);
+        }
+    }
 }
 var gEditor = null;
 var gDragged = null;
@@ -527,13 +560,11 @@ class GlyphView {
                         var old = this.model.flip(c.x, c.y);
                     }
                     cell.ondragstart = function(event) {
-                        console.log("dragstart");
                         // store a ref. on the dragged elem
                         gDragged = event.target;
                         // make it half transparent
                     };
                     cell.ondragover = (event) => {
-                        console.log("dragover");
                         if (!gDragged)
                         return;
                         var val = (gDragged.style.backgroundColor === this.bg) ? 0 : 1;
@@ -575,7 +606,7 @@ class GlyphView {
     updateToolTip() {
         var model = this.model;
         this.widget.setAttribute('title',
-        "Char: '" + model.char + "'\ncode: " + model.charCode +
+        "Char: '" + model.char + "'\ncode: " + ((model.char.length === 1) ? model.char.charCodeAt(0) : 'n/a') +
         '\nwidth: '+model.width+"\nheight: "+model.height);
     }
 
@@ -627,10 +658,15 @@ constructor() {
     this.progressMsgWidget = document.getElementById("progress-msg");
     this.glyphListRclickHandler = this.onGlyphRightClick.bind(this);
 }
-load(models, name) {
+load(models, opts) {
     let tsStart = Date.now();
     this.models = models;
-    this.preprocess();
+    if (!opts.new) {
+        this.preprocess();
+    } else {
+        this.fontHeight = models[0].height;
+        this.monoWidth = models[0].width;
+    }
     this.glyphListWidget.innerHTML = this.editorWidget.innerHTML = "";
     this.widget.classList.remove("hide");
     var glyphCount = models.length;
@@ -639,8 +675,8 @@ load(models, name) {
         let view = this.createGlyphViewForList(model);
         this.glyphListWidget.appendChild(view.widget);
     }
-    this.fontName = name;
-    let editor = this.glyphEditor = new GlyphView(models[1], 10, {active: true});
+    this.fontName = opts.name;
+    let editor = this.glyphEditor = new GlyphView(models[1] || models[0], 8, {active: true});
     editor.widget.setAttribute('id', 'glyphEditor');
     document.addEventListener("keydown", function(event) {
         if (event.keyCode == 90 && event.ctrlKey) {
@@ -672,6 +708,7 @@ load(models, name) {
    document.getElementById("menuSaveBtn").classList.remove("disabled");
    console.log(`GUI editor load took ${Date.now() - tsStart} ms`);
 }
+
 createGlyphViewForList(model) {
     var view = new GlyphView(model, 4, {active: false, bg: 'rgba(255,255,255,0)'});
     var widget = view.widget;
@@ -700,10 +737,17 @@ onGlyphRightClick(event) {
             this.deleteGlyph(view);
         }
     });
-    m.addItem("Insert", null, (event) => {
+    m.addItem("Insert before...", null, (event) => {
         if (this.warnAsciiOrder()) {
             this.insertGlyphBefore(view);
         }
+    });
+    m.addItem("Load from image...", null, async (event) => {
+        let blob = await this.readLocalFile(true);
+        if (!blob) {
+            return;
+        }
+        view.model.loadFromImgFile(blob);
     });
     m.show(event.pageX, event.pageY);
 }
@@ -741,17 +785,18 @@ deleteGlyph(glyphView) {
 insertGlyphBefore(glyphView) {
     let idx = this.indexOfGlyphView(glyphView);
     if (idx < 0) {
+        return null;
+    }
+    let char = prompt("Enter char:");
+    if (!char) {
         return;
     }
-    let char;
-    do {
-        char = prompt("Enter char code:");
-    } while(!char || char.length !== 1);
-    let model = new GlyphModel(this.monoWidth, this.fontHeight, char.charCodeAt(0));
+    let model = new GlyphModel(this.monoWidth, this.fontHeight, char);
     this.models.splice(idx, 0, model);
     let newView = this.createGlyphViewForList(model);
     this.glyphListWidget.insertBefore(newView.widget, glyphView.widget);
     this.glyphEditor.changeModel(model);
+    return newView;
 }
 preprocess() {
     let model0 = this.models[0];
@@ -834,13 +879,17 @@ scale(xFactor, yFactor) {
         this.monoWidth *= xFactor;
     }
 }
-readLocalFile() {
+readLocalFile(raw) {
     return new Promise((resolve, reject) => {
         let fi = document.createElement("input");
         fi.setAttribute("type", "file");
         fi.onchange = (event) => {
             var file = event.target.files[0];
             if (!file) {
+                return;
+            }
+            if (raw) {
+                resolve(file);
                 return;
             }
             var reader = new FileReader();
@@ -872,7 +921,7 @@ async importFromBdfFile() {
         let tsStart = Date.now();
         let models = parser.parse(data[0]);
         console.log(`BDF file parse took ${Date.now()-tsStart} ms`);
-        this.load(models, data[1]);
+        this.load(models, {name: data[1]});
     } catch(e) {
         alert(e);
     }
@@ -921,7 +970,7 @@ async importFromCSource() {
             }
             models.push(model);
         }
-        this.load(models, data[1]);
+        this.load(models, {name: data[1]});
     } finally {
         this.hideSpinner();
     }
@@ -936,14 +985,21 @@ exportToCSource(name) {
     }
     let text =
 `/* Vertical-scan bitmap data for font ${this.fontName}
- * Defines ASCII characters from ${this.models[0].charCode} to ${this.models[this.models.length-1].charCode}
+ * Defines ASCII characters from 32 to ${32 + this.models.length - 1}
  * Generated with lcdfont utility by Alexander Vassilev
  */
 #include <font.hpp>
 static const unsigned char _font_${this.fontName}_data[] = {\n`;
     let models = this.models;
-    let lastModel = models[models.length -1];
-    for (let model of models) {
+    let modelCnt = models.length;
+    let lastModel = models[modelCnt -1];
+    for (let idx = 0; idx < modelCnt; idx++) {
+        let model = models[idx];
+        let code = model.charCode;
+        if (code > -1 && code !== 32 + idx) {
+            alert(`Character code seems to not match its position for glyph ${model.char} at position ${idx}`);
+            return;
+        }
         let rows = model.rows;
         text += "    ";
         for (let x = 0; x < model.width; x++) {
@@ -967,7 +1023,7 @@ static const unsigned char _font_${this.fontName}_data[] = {\n`;
         if (model === lastModel) {
             text = text.slice(0, -1) + ' ';
         }
-        text += ` // ${model.char !== '\\' ? model.char : 'backslash'} (${model.charCode})\n`;
+        text += ` // ${model.char !== '\\' ? model.char : 'backslash'} (${32 + idx})\n`;
     }
     text +=
 `};\n
@@ -1091,7 +1147,7 @@ function loadRemoteFont() {
 }
 function loadModelFromSourceLineHScan(line, lineNo, bytes, fontHeight) {
     var width = bytes.length;
-    var model = new GlyphModel(width, fontHeight, lineNo + 32);
+    var model = new GlyphModel(width, fontHeight, String.fromCharCode(lineNo + 32));
 
     for (var col = 0; col < width; col++) {
         var byte = parseInt(bytes[col]);
@@ -1375,7 +1431,7 @@ class BdfFontParser {
             throw new Error("No BBX section found");
         }
         // parse hex values
-        let model = new GlyphModel(this.fontW, this.fontH, code);
+        let model = new GlyphModel(this.fontW, this.fontH, String.fromCharCode(code));
         while(idx < lines.length) {
             let line = lines[idx++];
             if (line.match(/ENDCHAR/)) {
@@ -1395,7 +1451,22 @@ class BdfFontParser {
         throw new Error("Unexpected end of glyph");
     }
 }
-
+function menuNew(event) {
+    let height;
+    do {
+        height = prompt("Font height:");
+        if (!height) {
+            return;
+        }
+        hight = parseInt(height);
+    } while(isNaN(height));
+    let char;
+    do {
+        char = prompt("First char:");
+    } while (!char);
+    let model = new GlyphModel(height, height, char);
+    gEditor.load([model], {new: true});
+}
 function menuLoad(event) {
     event.stopPropagation();
     let rect = document.getElementById("menuLoadBtn").getBoundingClientRect();
