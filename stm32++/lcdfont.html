@@ -125,15 +125,20 @@ body {
     z-index:101;
     transform: translate(-50%, -50%);
 }
+#font-info {
+    display: inline;
+    margin-left: 100px;
+    font-family: monospace;
+}
 </style>
 </head>
 <body>
     <div id=menu>
-        <label id=menuNewBtn onclick='menuNew(event)'><span>New</span></label>
+        <label id=menuNewBtn onclick='gEditor.newFont()'><span>New</span></label>
         <label id=menuLoadBtn onclick='menuLoad(event)'><span>Load</span></label>
         <label id=menuOptionsBtn onclick='menuOptions(event)'><span>Options</span></label>
-        <label id=menuSaveBtn class=disabled onclick='menuSave(event)'><span>Save</span><label>
-        <div id=fontInfo></div>
+        <label id=menuSaveBtn class=disabled onclick='menuSave(event)'><span>Save</span></label>
+        <div id=font-info></div>
     </div>
     <table id=editorGui class="hide"><tr>
         <td id=editorGroup>
@@ -194,9 +199,6 @@ class GlyphModel {
         this.char = char;
         this.allocate();
         this.listeners = new Array();
-    }
-    get charCode() {
-        return (this.char.length !== 1) ? -1 : this.char.charCodeAt(0);
     }
     allocate() {
         var h = this.height;
@@ -387,6 +389,7 @@ class GlyphModel {
         }
     }
     async loadFromImgFile(blob) {
+        this.clear();
         let w = this.width;
         let h = this.height;
         let bmp = await createImageBitmap(blob);
@@ -517,9 +520,6 @@ class GlyphView {
         this.widget = document.createElement('table');
         this.createGui();
         model.addListener(this);
-        if (!opts.active) {
-            this.updateToolTip();
-        }
     }
     createGui() {
         var view = this.widget;
@@ -603,10 +603,13 @@ class GlyphView {
         m.show(event.pageX, event.pageY);
     }
 
-    updateToolTip() {
+    updateToolTip(charCode) {
+        if (charCode) {
+            this.charCode = charCode;
+        }
         var model = this.model;
         this.widget.setAttribute('title',
-        "Char: '" + model.char + "'\ncode: " + ((model.char.length === 1) ? model.char.charCodeAt(0) : 'n/a') +
+        "Char: '" + model.char + "'\ncode: " + (this.charCode || '?') +
         '\nwidth: '+model.width+"\nheight: "+model.height);
     }
 
@@ -661,18 +664,14 @@ constructor() {
 load(models, opts) {
     let tsStart = Date.now();
     this.models = models;
-    if (!opts.new) {
-        this.preprocess();
-    } else {
-        this.fontHeight = models[0].height;
-        this.monoWidth = models[0].width;
-    }
+    this.preprocess(opts);
     this.glyphListWidget.innerHTML = this.editorWidget.innerHTML = "";
     this.widget.classList.remove("hide");
     var glyphCount = models.length;
     for (var i = 0; i < glyphCount; i++) {
         var model = models[i];
         let view = this.createGlyphViewForList(model);
+        view.updateToolTip(32 + i);
         this.glyphListWidget.appendChild(view.widget);
     }
     this.fontName = opts.name;
@@ -690,6 +689,9 @@ load(models, opts) {
         if (idx < 0 || idx >= glyphs.length)
             return;
         var bitmap = models[idx];
+        if (!bitmap) {
+            return;
+        }
         var letter = new GlyphView(bitmap, 2, {active: false, bg: 'rgba(255,255,255,0)'});
         var widget = letter.widget;
         var style = widget.style;
@@ -705,8 +707,9 @@ load(models, opts) {
            return;
        }
    }
-   document.getElementById("menuSaveBtn").classList.remove("disabled");
    console.log(`GUI editor load took ${Date.now() - tsStart} ms`);
+   this.updateFontInfo();
+   document.getElementById("menuSaveBtn").classList.remove("disabled");
 }
 
 createGlyphViewForList(model) {
@@ -720,6 +723,14 @@ createGlyphViewForList(model) {
 
     return view;
 }
+updateAllGlyphCodes() {
+    let models = this.models;
+    for (let idx = 0; idx < models.length; idx++) {
+        let model = models[idx];
+        model.updateToolTip(idx);
+    }
+}
+
 warnAsciiOrder() {
     if (this._asciiOrderWarningConfirmed) {
         return true;
@@ -732,16 +743,9 @@ onGlyphRightClick(event) {
     event.preventDefault();
     let view = event.currentTarget.glyphView;
     let m = CtxMenu.create();
-    m.addItem("Delete", null, (event) => {
-        if (this.warnAsciiOrder()) {
-            this.deleteGlyph(view);
-        }
-    });
-    m.addItem("Insert before...", null, (event) => {
-        if (this.warnAsciiOrder()) {
-            this.insertGlyphBefore(view);
-        }
-    });
+    m.addItem("Delete", null, (event) => this.deleteGlyph(view));
+    m.addItem("Insert before", null, (event) => this.insertNewGlyphBefore(view));
+    m.addItem("Append", null, (event) => this.appendNewGlyph());
     m.addItem("Load from image...", null, async (event) => {
         let blob = await this.readLocalFile(true);
         if (!blob) {
@@ -768,7 +772,15 @@ deleteGlyph(glyphView) {
     if (idx < 0) {
         return;
     }
+    let reorder;
     let models = this.models;
+    if (idx < models.length - 1) {
+        reorder = true;
+        if (!this.warnAsciiOrder()) {
+            return;
+        }
+    }
+
     if (this.glyphEditor.model === glyphView.model) {
         if (idx < models.length - 1) {
             this.glyphEditor.changeModel(models[idx+1]);
@@ -780,9 +792,15 @@ deleteGlyph(glyphView) {
         }
     }
     models.splice(idx, 1);
+    if (reorder) {
+        this.updateAllGlyphCodes();
+    }
     this.glyphListWidget.removeChild(glyphView.widget);
 }
-insertGlyphBefore(glyphView) {
+insertNewGlyphBefore(glyphView) {
+    if (!this.warnAsciiOrder()) {
+        return;
+    }
     let idx = this.indexOfGlyphView(glyphView);
     if (idx < 0) {
         return null;
@@ -794,11 +812,61 @@ insertGlyphBefore(glyphView) {
     let model = new GlyphModel(this.monoWidth, this.fontHeight, char);
     this.models.splice(idx, 0, model);
     let newView = this.createGlyphViewForList(model);
+    this.updateAllGlyphCodes();
     this.glyphListWidget.insertBefore(newView.widget, glyphView.widget);
     this.glyphEditor.changeModel(model);
     return newView;
 }
-preprocess() {
+appendNewGlyph() {
+    let char = prompt("Enter char:");
+    if (!char) {
+        return;
+    }
+    let width;
+    if (this.monoWidth) {
+        width = this.monoWidth;
+    } else {
+        do {
+            width = prompt("Glyph width:");
+            if (!width) {
+                width = this.fontHeight;
+                break;
+            }
+            width = parseInt(width);
+        } while(isNaN(width) || width === 0);
+    }
+    let model = new GlyphModel(width, this.fontHeight, char);
+    this.models.push(model);
+    let newView = this.createGlyphViewForList(model);
+    this.glyphListWidget.appendChild(newView.widget);
+    this.glyphEditor.changeModel(model);
+}
+updateFontInfo() {
+    let text = `Font ${this.fontName},`;
+    if (this.monoWidth) {
+        text += ` Mono ${this.monoWidth}x${this.fontHeight}`;
+    } else {
+        let minW = 100000;
+        let maxW = 0;
+        for (let model of this.models) {
+            let w = model.width;
+            if (w < minW) {
+                minW = w;
+            }
+            if (w > maxW) {
+                maxW = w;
+            }
+        }
+        text = `Var-width (${minW}-${maxW})x${this.fontHeight}`;
+    }
+    text += `, ${this.models.length} glyphs`;
+    document.getElementById("font-info").innerHTML = text;
+}
+
+preprocess(opts) {
+    if (opts.noMono) {
+        return this.standaloneCheckFontHeight();
+    }
     let model0 = this.models[0];
     let width0 = model0.width;
     let height0 = model0.height;
@@ -946,14 +1014,19 @@ async importFromCSource() {
         };
         var bytesPerCol = Math.floor((this.fontHeight + 7) / 8);
         var models = [];
-        var lines = contents.match(/(0x[0-9a-fA-F]+[,\s]*){4,}/gm);
+        var lines = contents.match(/(0x[0-9a-fA-F]+[,\s]*){4,}.*/gm);
         var ll = lines.length;
-        for (var l=0; l<ll; l++) {
-            var bytes = lines[l].match(/(0x[0-9a-fA-F]+)/g);
+        for (let l=0; l<ll; l++) {
+            let line = lines[l];
+            var glyphName = line.match(/\/\/\s*([^\s]+)/);
+            if (glyphName) {
+                glyphName = glyphName[1];
+            }
+            var bytes = line.match(/(0x[0-9a-fA-F]+)/g);
             if (bytes.length % bytesPerCol) {
                 throw new Error(`Incorrect number of bytes at row ${l}`);
             }
-            let model = new GlyphModel(Math.round(bytes.length / bytesPerCol), this.fontHeight, l + 32);
+            let model = new GlyphModel(Math.round(bytes.length / bytesPerCol), this.fontHeight, glyphName || String.fromCharCode(l + 32));
             let rows = model.rows;
             for (let byteIdx = 0; byteIdx < bytes.length; byteIdx++) {
                 let byte = parseInt(bytes[byteIdx]);
@@ -970,7 +1043,7 @@ async importFromCSource() {
             }
             models.push(model);
         }
-        this.load(models, {name: data[1]});
+        this.load(models, {name: data[1].replace(/^font_/, '')});
     } finally {
         this.hideSpinner();
     }
@@ -984,7 +1057,7 @@ exportToCSource(name) {
         throw new Error("Font name not set");
     }
     let text =
-`/* Vertical-scan bitmap data for font ${this.fontName}
+`/* Vertical-scan bitmap data for font ${this.fontName} (${this.monoWidth ? this.monoWidth : "?"}x${this.fontHeight})
  * Defines ASCII characters from 32 to ${32 + this.models.length - 1}
  * Generated with lcdfont utility by Alexander Vassilev
  */
@@ -1025,11 +1098,50 @@ static const unsigned char _font_${this.fontName}_data[] = {\n`;
         }
         text += ` // ${model.char !== '\\' ? model.char : 'backslash'} (${32 + idx})\n`;
     }
+    text += "};\n"
+
+    if (!this.monoWidth) {
+        let currOffset = 0;
+        let offsets = [];
+        let bytesPerCol = ((this.fontHeight + 7) / 8) >>> 0;
+        for (let model of models) {
+            currOffset += model.width * bytesPerCol;
+            offsets.push(currOffset);
+        }
+        text += `static const unsigned char _font_${this.fontName}_offsets[] = {\n`;
+        for (let ofs of offsets) {
+            text += `${ofs},`;
+        }
+        text = text.slice(0, -1) + "\n};\n";
+    }
     text +=
-`};\n
-// (isVertical, width, height, count, charSpacing, lineSpacing, data, widths)
-extern Font const font_${this.fontName}(true, ${this.monoWidth}, ${this.fontHeight}, ${models.length}, 1, 1, _font_${this.fontName}_data, nullptr);`;
+`// (isVertical, width, height, count, charSpacing, lineSpacing, data, offsets)
+extern Font const font_${this.fontName}(true, ${this.monoWidth || 0}, ${this.fontHeight}, ${models.length}, 1, 1, _font_${this.fontName}_data, ${this.monoWidth ? "nullptr" : "_font_" + this.fontName + "_offsets"});`;
     return text;
+}
+newFont() {
+    let height;
+    do {
+        height = prompt("Font height:");
+        if (!height) {
+            return;
+        }
+        height = parseInt(height);
+    } while(isNaN(height));
+    let width;
+    do {
+        width = prompt("Font width:");
+        if (!width) {
+            break;
+        }
+        width = parseInt(width);
+    } while (isNaN(width));
+    let char;
+    do {
+        char = prompt("First char:");
+    } while (!char);
+    let model = new GlyphModel(width || height, height, char);
+    gEditor.load([model], width ? {} : {noMono: true});
 }
 }
 class CtxMenu {
@@ -1450,22 +1562,6 @@ class BdfFontParser {
         }
         throw new Error("Unexpected end of glyph");
     }
-}
-function menuNew(event) {
-    let height;
-    do {
-        height = prompt("Font height:");
-        if (!height) {
-            return;
-        }
-        hight = parseInt(height);
-    } while(isNaN(height));
-    let char;
-    do {
-        char = prompt("First char:");
-    } while (!char);
-    let model = new GlyphModel(height, height, char);
-    gEditor.load([model], {new: true});
 }
 function menuLoad(event) {
     event.stopPropagation();
