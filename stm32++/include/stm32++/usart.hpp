@@ -10,6 +10,7 @@
 #include <libopencm3/stm32/usart.h>
 #include <libopencm3/stm32/dma.h>
 #include <libopencm3/cm3/nvic.h>
+#include "gpio.hpp"
 #include "tprintf.hpp"
 #include "dma.hpp"
 #include <assert.h>
