@@ -142,4 +142,8 @@ function(stm32_create_utility_targets imgname)
         -ex 'target remote localhost:3333'
         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
         DEPENDS "${imgname}")
+    add_custom_target(wflash
+        COMMAND sh -c "echo Flashing over network, please wait..."
+        COMMAND bash -c "curl -i http://stm32.local:80/fileflash?file=${imgnameNoExt}.bin -H 'Content-Type: application/octet-stream' -H Expect: --data-binary @./${imgnameNoExt}.bin --silent --output /dev/null --show-error --fail"
+        DEPENDS bin)
 endfunction()

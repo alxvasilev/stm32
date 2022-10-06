@@ -187,7 +187,7 @@ public:
         }
         usart_set_mode(Self::kPeriphId, mode);
         usart_set_baudrate(Self::kPeriphId, baudRate);
-        usart_set_databits(Self::kPeriphId, 8);
+        usart_set_databits(Self::kPeriphId, 9);
         usart_set_stopbits(Self::kPeriphId, stopBits);
         usart_set_parity(Self::kPeriphId, parity);
         usart_set_flow_control(Self::kPeriphId, USART_FLOWCONTROL_NONE);

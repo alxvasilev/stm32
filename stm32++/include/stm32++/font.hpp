@@ -24,11 +24,11 @@ struct Font
                 return nullptr;
             }
             uint8_t byteHeight = (height + 7) / 8;
-            return data + (byteHeight * width) * pos;
+            return data + (byteHeight * width) * code;
         }
         else {
             uint32_t ofs = 0;
-            for (int ch = 0; ch < pos; ch++)
+            for (int ch = 0; ch < code; ch++)
                 ofs+=widths[ch];
             return data+ofs;
         }

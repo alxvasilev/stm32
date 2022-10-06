@@ -10,7 +10,7 @@
 #include <libopencm3/stm32/i2c.h>
 #include <libopencm3/cm3/nvic.h>
 #include <stm32++/timeutl.hpp>
-#include <stm32++/snprint.hpp>
+#include <stm32++/tsnprintf.hpp>
 #include <stm32++/semihosting.hpp>
 #include <stm32++/dma.hpp>
 namespace dma
@@ -343,8 +343,8 @@ STM32PP_PERIPH_INFO(I2C1)
     enum: uint8_t {
         kDmaTxChannel = DMA_CHANNEL6,
         kDmaRxChannel = DMA_CHANNEL7,
+        kDmaWordSize = 1
     };
-    static const uint8_t dmaWordSize() { return 1; }
     static const uint32_t dmaRxDataRegister() { return (uint32_t)(&I2C1_DR); }
     static const uint32_t dmaTxDataRegister() { return (uint32_t)(&I2C1_DR); }
 };
@@ -357,8 +357,8 @@ STM32PP_PERIPH_INFO(I2C2)
     enum: uint8_t {
         kDmaTxChannel = DMA_CHANNEL4,
         kDmaRxChannel = DMA_CHANNEL5,
+        kDmaWordSize = 1
     };
-    static const uint8_t dmaWordSize() { return 1; }
     static const uint32_t dmaTxDataRegister() { return (uint32_t)(&I2C2_DR); }
     static const uint32_t dmaRxDataRegister() { return (uint32_t)(&I2C2_DR); }
 };

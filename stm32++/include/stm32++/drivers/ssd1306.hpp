@@ -127,7 +127,7 @@ public:
     template <bool D=HasTxDma<IO>::value>
     typename std::enable_if<D, void>::type sendBuffer()
     {
-        mIo.dmaTxStart(mBuf, sizeof(mBuf), nullptr);
+        mIo.dmaTxStart(mBuf, sizeof(mBuf));
     }
     template <bool D=HasTxDma<IO>::value>
     typename std::enable_if<!D, void>::type sendBuffer()
