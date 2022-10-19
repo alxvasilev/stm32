@@ -144,6 +144,10 @@ function(stm32_create_utility_targets imgname)
         DEPENDS "${imgname}")
     add_custom_target(wflash
         COMMAND sh -c "echo Flashing over network, please wait..."
-        COMMAND bash -c "curl -i http://stm32.local:80/fileflash?file=${imgnameNoExt}.bin -H 'Content-Type: application/octet-stream' -H Expect: --data-binary @./${imgnameNoExt}.bin --silent --output /dev/null --show-error --fail"
+        COMMAND bash -c "curl -i http://stm32.local:80/fileflash?file=${imgnameNoExt}.bin&verify=0 -H 'Content-Type: application/octet-stream' -H Expect: --data-binary @./${imgnameNoExt}.bin --silent --output /dev/null --show-error --fail"
+        DEPENDS bin)
+        add_custom_target(wflashv
+        COMMAND sh -c "echo Flashing over network, please wait..."
+        COMMAND bash -c "curl -i http://stm32.local:80/fileflash?file=${imgnameNoExt}.bin&verify=1 -H 'Content-Type: application/octet-stream' -H Expect: --data-binary @./${imgnameNoExt}.bin --silent --output /dev/null --show-error --fail"
         DEPENDS bin)
 endfunction()
