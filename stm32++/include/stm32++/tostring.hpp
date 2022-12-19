@@ -162,8 +162,9 @@ toString(char* buf, size_t bufsize, Val val, uint8_t minDigits=0, uint16_t minLe
     } while(numDigits);
 
 
-    if ((flags & kDontNullTerminate) == 0)
+    if ((flags & kDontNullTerminate) == 0) {
         *buf = 0;
+    }
     return buf;
 }
 
@@ -178,9 +179,8 @@ toString(char* buf, size_t bufsize, Val val)
     {
         if (bufsize < 2)
         {
-            if (bufsize)
-            {
-                *buf = (flags & kDontNullTerminate) ? '-' : 0;
+            if (bufsize) {
+                *buf = 0;
             }
             return nullptr;
         }
