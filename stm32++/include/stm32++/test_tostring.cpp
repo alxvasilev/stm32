@@ -92,7 +92,7 @@ int main()
 
     // 4.1122345 is represented as 4.112234499999999, which causes down-rounding on .5
     // This happens also with printf("%.6f") with this value
-    verify("float6 round-up 4.1122345", "4.112234", fmtFp<6>(4.1122345));
+    verify("float6 round-up fail rounding error: 4.1122345", "4.112234", fmtFp<6>(4.1122345));
     // Doesn't occur on 1.112235
     verify("float6 round-up 1.1122345", "1.112235", fmtFp<6>(1.1122345));
     //====
