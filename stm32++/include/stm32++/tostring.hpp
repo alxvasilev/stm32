@@ -276,13 +276,6 @@ template <Flags flags=0, typename T>
 auto fmtBin32(T aVal, uint8_t minDigits=32)
 { return IntFmt<uint32_t, (flags & ~kFlagsBaseMask)|2>(aVal, minDigits); }
 
-template <Flags flags=16, typename T>
-IntFmt<T, flags> fmtStruct(T aVal)
-{
-    typedef IntFmt<T, flags> Fmt;
-    return Fmt(*((typename Fmt::ScalarType*)&aVal));
-}
-
 template <Flags flags=0, class P>
 typename std::enable_if<std::is_pointer<P>::value && !is_char_ptr<P>::value, char*>::type
 toString(char *buf, size_t bufsize, P ptr)
