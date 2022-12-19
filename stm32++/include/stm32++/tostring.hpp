@@ -172,7 +172,7 @@ template<Flags flags=10, typename Val>
 typename std::enable_if<std::is_integral<Val>::value
     && std::is_signed<Val>::value
     && !std::is_same<Val, char>::value, char*>::type
-toString(char* buf, size_t bufsize, Val val)
+toString(char* buf, size_t bufsize, Val val, uint8_t minDigits=0, uint8_t minLen=0)
 {
     typedef typename std::make_unsigned<Val>::type UVal;
     if (val < 0)
@@ -185,11 +185,11 @@ toString(char* buf, size_t bufsize, Val val)
             return nullptr;
         }
         *buf = '-';
-        return toString<flags, UVal>(buf+1, bufsize-1, -val);
+        return toString<flags, UVal>(buf+1, bufsize-1, -val, minDigits, minLen);
     }
     else
     {
-        return toString<flags, UVal>(buf, bufsize, val);
+        return toString<flags, UVal>(buf, bufsize, val, minDigits, minLen);
     }
 }
 
@@ -209,36 +209,15 @@ struct is_char_ptr<T, typename
     enum: bool { value = true };
 };
 
-template <class T, size_t Size=sizeof(T)>
-struct UnsignedEquiv{ enum: bool {invalid = true}; };
-
-template <class T>
-struct UnsignedEquiv<T, 1> { typedef uint8_t type; };
-
-template <class T>
-struct UnsignedEquiv<T, 2> { typedef uint16_t type; };
-
-template <class T>
-struct UnsignedEquiv<T, 4> { typedef uint32_t type; };
-
-template <class T>
-struct UnsignedEquiv<T, 8> { typedef uint64_t type; };
-
 template <typename T, Flags aFlags>
 struct IntFmt
 {
-    typedef typename UnsignedEquiv<T>::type ScalarType;
-    enum: uint8_t { base = baseFromFlags(aFlags) };
-    static constexpr Flags flags = aFlags & (kFlagsBaseMask | kNoPrefix | kUpperCase);
-    ScalarType value;
+    constexpr static Flags flags = localFlags(aFlags);
+    T value;
     uint8_t minDigits;
     uint8_t minLen;
     explicit IntFmt(T aVal, uint8_t aMinDigits=0, uint8_t aMinLen=0)
-    : value((ScalarType)(aVal)), minDigits(aMinDigits), minLen(aMinLen){}
-
-    template <class U=T, class=typename std::enable_if<!std::is_same<ScalarType, U>::value, void>::type>
-    explicit IntFmt(ScalarType aVal, uint8_t aMinDigits=0, uint8_t aMinLen=0)
-    : value(aVal), minDigits(aMinDigits), minLen(aMinLen){}
+    : value(aVal), minDigits(aMinDigits), minLen(aMinLen) {}
 };
 
 template <typename T, uint8_t base>
@@ -258,38 +237,46 @@ struct NumLenForBase
  * @param minLen The minimum number of chars in the resulting number string.
  * If the actual chars are fewer after applying \c minDigits, spaces are appended to the string.
  */
-template <Flags flags=0, class T>
+template <Flags flags=0, typename T>
 IntFmt<T, flags> fmtInt(T aVal, uint8_t minDigits=0, uint8_t minLen=0)
 { return IntFmt<T, flags>(aVal, minDigits, minLen); }
 
-template <Flags flags=0, class T>
+template <Flags flags=0, typename T>
 auto fmtHex(T aVal, uint8_t minDigits=0, uint8_t minLen=0)
 { return IntFmt<T, (flags & ~kFlagsBaseMask)|16>(aVal, minDigits, minLen); }
 
-template <Flags flags=0, class T>
-auto fmtBin(T aVal, uint8_t minDigits=8, uint8_t minLen=0)
-{ return IntFmt<T, (flags & ~kFlagsBaseMask)|2>(aVal, minDigits, minLen); }
-
-template <Flags flags=0>
-auto fmtHex8(uint8_t aVal, uint8_t minDigits=2)
+template <Flags flags=0, typename T>
+auto fmtHex8(T aVal, uint8_t minDigits=2)
 { return IntFmt<uint8_t, (flags & ~kFlagsBaseMask)|16>(aVal, minDigits); }
 
-template <Flags flags=0>
-auto fmtBin8(uint8_t aVal, uint8_t minDigits=8)
-{ return IntFmt<uint8_t, (flags & ~kFlagsBaseMask)|2>(aVal, minDigits); }
-
-template <Flags flags=0>
-auto fmtHex16(uint16_t aVal, uint8_t minDigits=4)
+template <Flags flags=0, typename T>
+auto fmtHex16(T aVal, uint8_t minDigits=4)
 { return IntFmt<uint16_t, (flags & ~kFlagsBaseMask)|16>(aVal, minDigits); }
+
+template <Flags flags=0, typename T>
+auto fmtHex32(T aVal, uint8_t minDigits=8)
+{ return IntFmt<uint32_t, (flags & ~kFlagsBaseMask)|16>(aVal, minDigits); }
 
 template <Flags flags=0, typename Ptr>
 auto fmtPtr(Ptr ptr) { return fmtHex(ptr, sizeof(void*) * 2); }
 
-template <Flags flags=0>
-auto fmtBin16(uint16_t aVal, uint8_t minDigits=16)
+template <Flags flags=0, typename T>
+auto fmtBin(T aVal, uint8_t minDigits=0, uint8_t minLen=0)
+{ return IntFmt<T, (flags & ~kFlagsBaseMask)|2>(aVal, minDigits, minLen); }
+
+template <Flags flags=0, typename T>
+auto fmtBin8(T aVal, uint8_t minDigits=8)
+{ return IntFmt<uint8_t, (flags & ~kFlagsBaseMask)|2>(aVal, minDigits); }
+
+template <Flags flags=0, typename T>
+auto fmtBin16(T aVal, uint8_t minDigits=16)
 { return IntFmt<uint16_t, (flags & ~kFlagsBaseMask)|2>(aVal, minDigits); }
 
-template <Flags flags=16, class T>
+template <Flags flags=0, typename T>
+auto fmtBin32(T aVal, uint8_t minDigits=32)
+{ return IntFmt<uint32_t, (flags & ~kFlagsBaseMask)|2>(aVal, minDigits); }
+
+template <Flags flags=16, typename T>
 IntFmt<T, flags> fmtStruct(T aVal)
 {
     typedef IntFmt<T, flags> Fmt;
@@ -303,10 +290,10 @@ toString(char *buf, size_t bufsize, P ptr)
     return toString(buf, bufsize, fmtPtr(ptr));
 }
 
-template<Flags flags=0, Flags fmtFlags, typename Val>
-char* toString(char *buf, size_t bufsize, IntFmt<Val, fmtFlags> num)
+template<Flags flags=0, Flags _, typename Val>
+char* toString(char *buf, size_t bufsize, IntFmt<Val, _> num)
 {
-    return toString<num.flags | (flags & ~kFlagsBaseMask)>(buf, bufsize, num.value, num.minDigits, num.minLen);
+    return toString<num.flags | globalFlags(flags)>(buf, bufsize, num.value, num.minDigits, num.minLen);
 }
 
 template<Flags flags=0>
