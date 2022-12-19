@@ -24,10 +24,14 @@ enum: uint16_t {
     kFlagsBaseMask = 0xff,
     kFlagsPrecMask = 0xff,
     kLowerCase = 0x0, kUpperCase = 0x1000,
-    kDontNullTerminate = 0x0200, kNoPrefix = 0x0400
+    kDontNullTerminate = 0x0200, kNoPrefix = 0x0400,
+    kFlagsMaskGlobal = kDontNullTerminate
 };
 
 typedef uint16_t Flags;
+constexpr Flags globalFlags(Flags flags) { return flags & kFlagsMaskGlobal; }
+constexpr Flags localFlags(Flags flags) { return flags &~kFlagsMaskGlobal; }
+
 constexpr uint8_t baseFromFlags(Flags flags)
 {
     uint8_t base = flags & 0xff;
@@ -90,8 +94,13 @@ toString(char* buf, size_t bufsize, Val val, uint8_t minDigits=0, uint16_t minLe
     assert(buf);
     assert(bufsize);
 
-    if ((flags & kDontNullTerminate) == 0)
+    if ((flags & kDontNullTerminate) == 0) {
         bufsize--;
+    }
+    if (bufsize < minLen) {
+        *buf = 0;
+        return nullptr;
+    }
     enum: uint8_t { base = baseFromFlags(flags) };
     DigitConverter<base, flags> digitConv;
     char stagingBuf[digitConv.digitsPerByte * sizeof(Val)];
@@ -377,11 +386,12 @@ struct Pow<base, 1>
 
 template<Flags flags=6, typename Val>
 typename std::enable_if<std::is_floating_point<Val>::value, char*>::type
-toString(char* buf, size_t bufsize, Val val, uint8_t minDigits=0)
+toString(char* buf, size_t bufsize, Val val, uint8_t minDigits=0, uint8_t minLen=0)
 {
     enum: uint8_t { prec = precFromFlags(flags) };
-    if (!bufsize)
+    if (!bufsize) {
         return nullptr;
+    }
     char* bufRealEnd = buf+bufsize;
     if ((flags & kDontNullTerminate) == 0)
         bufsize--;
@@ -430,31 +440,36 @@ toString(char* buf, size_t bufsize, Val val, uint8_t minDigits=0)
         whole++;
         fractional -= mult;
     }
+    if (minLen > prec) {
+        minLen -= (prec + 1);
+    }
     //we have some minimum space for null termination even if buffer is not enough
-    buf = toString<(flags&~kFlagsBaseMask)|10>(buf, bufRealEnd-buf, whole, minDigits);
+    auto originalBuf = buf;
+    buf = toString<kDontNullTerminate|10>(buf, bufRealEnd-buf, whole, minDigits, minLen);
     if (!buf)
     {
-        assert(*(bufRealEnd-1)==0); //assert null termination
+        assert(*originalBuf == 0); //assert null termination
         return nullptr;
     }
     assert(buf < bufRealEnd);
     if (bufend-buf < 2) //must have space at least for '.0' and optional null terminator
     {
-        *buf = 0;
+        *originalBuf = 0;
         return nullptr;
     }
     *(buf++) = '.';
-    return toString(buf, bufRealEnd-buf, fractional, prec);
+    return toString<globalFlags(flags)|10>(buf, bufRealEnd-buf, fractional, prec);
 }
 
 template <class T, Flags aFlags>
 struct FpFmt
 {
-    enum: uint8_t { prec = precFromFlags(aFlags) };
-    constexpr static Flags flags = aFlags & kFlagsPrecMask;
+    constexpr static Flags flags = localFlags(aFlags);
     T value;
     uint8_t minDigits;
-    FpFmt(T aVal, uint8_t aMinDigits): value(aVal), minDigits(aMinDigits){}
+    uint8_t minLen;
+    FpFmt(T aVal, uint8_t aMinDigits, uint8_t minLen)
+    : value(aVal), minDigits(aMinDigits), minLen(minLen) {}
 };
 
 /**
@@ -468,18 +483,18 @@ struct FpFmt
  *
  */
 template <Flags aFlags=6, class T>
-auto fmtFp(T val, uint8_t minDigits=0)
+auto fmtFp(T val, uint8_t minDigits=0, uint8_t minLen=0)
 {
-    return FpFmt<T, aFlags>(val, minDigits);
+    return FpFmt<T, aFlags>(val, minDigits, minLen);
 }
 
-template <Flags generalFlags, Flags fpFlags, typename Val>
-char* toString(char *buf, size_t bufsize, FpFmt<Val, fpFlags> fp)
+template <Flags glFlags, Flags _, typename Val>
+char* toString(char *buf, size_t bufsize, FpFmt<Val, _> fp)
 {
     // Extract precision and padding, merge other flags from fpFlags to aFlags to
     // and forward to the toString(float) version
     // General flags filtered out from fpFlags and fp formatting flags filtered out from general flags
-    return toString<fp.flags | (generalFlags & ~kFlagsPrecMask), Val>(buf, bufsize, fp.value, fp.minDigits);
+    return toString<fp.flags|globalFlags(glFlags), Val>(buf, bufsize, fp.value, fp.minDigits, fp.minLen);
 }
 
 template <uint8_t aFlags=0>
