@@ -78,9 +78,4 @@ int main()
     verify("float round-down", "44.9", fmtFp<1>(44.94f));
     verify("float round-up", "-45.0", fmtFp<1>(-44.95f));
     verify("float round-down", "-44.9", fmtFp<1>(-44.94f));
-
-
-    char buf[] = "    K/s  bit";
-    toString<kDontNullTerminate>(buf, 5, fmtFp<1>((float)44.1, 3, 5));
-    printf("%s\n", buf);
 }
