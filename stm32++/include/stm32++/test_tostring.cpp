@@ -3,10 +3,27 @@
 #include <unistd.h>
 #include <string.h>
 
+enum { kConsoleWidth = 80, kStatusWidth = 12 };
+
+int gFails = 0;
 const char* COLOR_GREEN = isatty(1) ? "\e[1;32m" : "";
 const char* COLOR_RED = isatty(1) ? "\e[1;31m" : "";
 const char* COLOR_NORMAL = isatty(1) ? "\e[0m" : "";
 const char* spaces = "                                                                                                      ";
+const char* border = "======================================================================================================";
+int summary()
+{
+    auto borderLen = (kConsoleWidth - kStatusWidth - 17 + 2) / 2;
+    if (gFails) {
+        printf("%.*s %2d tests %sFAILED%s %.*s\n", borderLen, border, gFails, COLOR_RED, COLOR_NORMAL, borderLen, border);
+        return 1;
+    }
+    else {
+        printf("%.*s All test %sPASSED%s %.*s\n", borderLen, border, COLOR_GREEN, COLOR_NORMAL, borderLen, border);
+        return 0;
+    }
+}
+
 template <int flags=0, typename... Args>
 void verify(const char* testName, const char* expected, Args... args)
 {
@@ -14,7 +31,7 @@ void verify(const char* testName, const char* expected, Args... args)
     int lenOutBuf = std::max(lenExpected, 128) + 1;
     char* buf = (char*)alloca(lenOutBuf);
     int lineLen = lenExpected + strlen(testName) + 4;
-    int numSpaces = 68 - lineLen;
+    int numSpaces = kConsoleWidth - kStatusWidth - lineLen;
     if (numSpaces < 0) {
         numSpaces = 0;
     }
@@ -22,18 +39,22 @@ void verify(const char* testName, const char* expected, Args... args)
     auto result = toString<flags>(buf, lenOutBuf, args...);
     if (!result) {
         printf("%sNULL-return%s\n", COLOR_RED, COLOR_NORMAL);
+        gFails++;
         return;
     }
     if (strcmp(buf, expected)) {
         printf("%sMISMATCH%s\n", COLOR_RED, COLOR_NORMAL);
         printf("%.*sinstead got: \"%s\"\n", (int)strlen(testName) + numSpaces + lenExpected - (int)strlen(buf)- 12, spaces, buf);
+        gFails++;
     } else {
         printf("%sOK%s\n", COLOR_GREEN, COLOR_NORMAL);
     }
 }
+
 int main()
 {
     verify("simple string", "Test message", "Test message");
+    verify("char", "x", 'x');
     verify("repeat char", "xxxxxxxxxx", rptChar('x', 10));
     verify("repeat char once", "x", rptChar('x', 1));
     verify("repeat char zero times", "", rptChar('x', 0));
@@ -78,4 +99,5 @@ int main()
     verify("float round-down", "44.9", fmtFp<1>(44.94f));
     verify("float round-up", "-45.0", fmtFp<1>(-44.95f));
     verify("float round-down", "-44.9", fmtFp<1>(-44.94f));
+    return summary();
 }
