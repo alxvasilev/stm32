@@ -70,7 +70,7 @@ int main()
     verify("hex32(+)", "deadbeef", fmtHex32(0xdeadbeef));
 
     verify("bigHex(+)", "0xdeadbeefcafebabe", fmtHex<kNumPrefix>(0xdeadbeefcafebabeLL));
-    verify("bigHex(-)", "-0xdeadbeefcafeb", fmtHex<kNumPrefix>(-0xdeadbeefcafebLL));
+    verify("bigHex(-)", "-0x7eadbeefcafebabe", fmtHex<kNumPrefix>(-0x7eadbeefcafebabeLL));
 
     verify("bin(-1)", "-1", fmtBin(-1));
     verify("bin(-1) w/prefix", "-0b1", fmtBin<kNumPrefix>(-1));
