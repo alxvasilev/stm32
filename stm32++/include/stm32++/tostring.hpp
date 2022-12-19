@@ -480,7 +480,8 @@ struct FpFmt
  * @param minDigits - the minimum number of digits for the whole part of the number
  * (before the decimal point). If the actual digits are fewer, zeroes are prepended
  * to the whole part of the number.
- *
+ *@param minLen - the minimum length of the whole floating point string. If the actual
+ * output is shorter, then spaces are prepended before the integer part
  */
 template <Flags aFlags=6, class T>
 auto fmtFp(T val, uint8_t minDigits=0, uint8_t minLen=0)
@@ -491,9 +492,7 @@ auto fmtFp(T val, uint8_t minDigits=0, uint8_t minLen=0)
 template <Flags glFlags, Flags _, typename Val>
 char* toString(char *buf, size_t bufsize, FpFmt<Val, _> fp)
 {
-    // Extract precision and padding, merge other flags from fpFlags to aFlags to
-    // and forward to the toString(float) version
-    // General flags filtered out from fpFlags and fp formatting flags filtered out from general flags
+    // Get local formatting flags from fp, and merge the global flags from the toString call
     return toString<fp.flags|globalFlags(glFlags), Val>(buf, bufsize, fp.value, fp.minDigits, fp.minLen);
 }
 
