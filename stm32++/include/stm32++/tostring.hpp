@@ -24,7 +24,7 @@ enum: uint16_t {
     kFlagsBaseMask = 0xff,
     kFlagsPrecMask = 0xff,
     kLowerCase = 0x0, kUpperCase = 0x1000,
-    kDontNullTerminate = 0x0200, kNoPrefix = 0x0400,
+    kDontNullTerminate = 0x0200, kNumPrefix = 0x0400,
     kFlagsMaskGlobal = kDontNullTerminate
 };
 
@@ -123,7 +123,7 @@ toString(char* buf, size_t bufsize, Val val, uint8_t minDigits=0, uint16_t minLe
         padLen = 0;
     }
     size_t totalLen;
-    if (((flags & kNoPrefix) == 0) && (digitConv.prefixLen != 0))
+    if ((flags & kNumPrefix) && (digitConv.prefixLen != 0))
     {
         totalLen = digitConv.prefixLen+padLen+numDigits;
         if (bufsize < totalLen)
@@ -231,7 +231,7 @@ struct NumLenForBase
  *   10 for decimal format, 16 for hex, 2 for binary. Arbitrary values are supported
  * - \c kUpperCase = 0x1000 - use upper case where applicable
  * - \c kDontNullTerminate = 0x0200 - don't null-terminate the resulting string
- * - \c kNoPrefix = 0x0400 - don't include the numberic system prefix, i.e. 0x for hex
+ * - \c kNumPrefix = 0x0400 - include the numberic system prefix, i.e. 0x for hex
  * @param minDigits The minimum number of digits to display. If the actual digits
  * are less, zeroes are prepended to the number
  * @param minLen The minimum number of chars in the resulting number string.
